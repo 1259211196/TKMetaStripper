@@ -1,0 +1,37 @@
+name: Build TKMetaStripper Dylib
+
+# 触发条件：当你提交代码到主分支，或者在网页手动点击运行时触发
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch: 
+
+jobs:
+  build:
+    runs-on: macos-latest # 使用 GitHub 免费提供的最新 Mac 云服务器
+    env:
+      THEOS: ${{ github.workspace }}/theos
+
+    steps:
+    - name: 1. 检出你的代码
+      uses: actions/checkout@v4
+
+    - name: 2. 在云端静默安装 Theos 编译环境
+      run: |
+        git clone --recursive https://github.com/theos/theos.git $THEOS
+
+    - name: 3. 下载 iOS SDK (兼容跨设备编译)
+      run: |
+        git clone https://github.com/theos/sdks.git $THEOS/sdks
+
+    - name: 4. 编译 Release 正式版 (自动剥离危险特征)
+      run: |
+        make clean
+        make FINALPACKAGE=1
+
+    - name: 5. 提取产物并生成下载链接
+      uses: actions/upload-artifact@v4
+      with:
+        name: TKMetaStripper_Release_Dylib
+        # 自动去隐藏目录抓取编译好的 dylib 文件
+        path: .theos/obj/**/TKMetaStripper.dylib
