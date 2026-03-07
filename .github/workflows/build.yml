@@ -23,8 +23,9 @@ jobs:
       run: |
         git clone --recursive https://github.com/theos/theos.git $THEOS
 
-    - name: 4. 下载 iOS SDK
+    - name: 4. 下载 iOS SDK (修复文件夹冲突)
       run: |
+        rm -rf $THEOS/sdks
         git clone https://github.com/theos/sdks.git $THEOS/sdks
 
     - name: 5. 编译 Release 正式版
