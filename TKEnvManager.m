@@ -25,7 +25,7 @@
         self.currentTimeZone = tzName ? [NSTimeZone timeZoneWithName:tzName] : [NSTimeZone timeZoneWithName:@"Europe/Berlin"];
         NSLog(@"[TKMetaStripper] 已加载本地缓存节点: %@", self.currentCountryCode);
     } else {
-        // 首次安装的默认底线：德国法兰克福
+        // 安全底线：德国法兰克福
         self.currentLatitude = 50.1109;
         self.currentLongitude = 8.6821;
         self.currentCountryCode = @"DE";
@@ -36,7 +36,7 @@
 
 - (void)fetchDynamicNetworkEnvironment {
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-        // 🔥 优化1：使用支持 HTTPS 的商业级开源接口，完美绕过 iOS ATS 拦截 🔥
+        // 使用支持 HTTPS 的免费商业级接口
         NSURL *url = [NSURL URLWithString:@"https://freeipapi.com/api/json"];
         NSURLSessionDataTask *task = [[NSURLSession sharedSession] dataTaskWithURL:url completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
             if (!error && data) {
