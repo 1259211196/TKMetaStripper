@@ -12,7 +12,7 @@
     return shared;
 }
 
-// 🔥 优化2：沙盒清道夫，静默清理历史遗留的替身视频，防止文稿数据无限膨胀 🔥
+// 沙盒清道夫：静默清理 1 小时前的历史替身视频
 - (void)cleanOldDecoyVideosInBackground {
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_BACKGROUND, 0), ^{
         NSFileManager *fm = [NSFileManager defaultManager];
@@ -26,7 +26,6 @@
                 NSDictionary *attrs = [fm attributesOfItemAtPath:filePath error:nil];
                 NSDate *creationDate = [attrs fileCreationDate];
                 
-                // 如果文件创建时间超过 1 小时 (3600秒)，则安全删除
                 if (creationDate && [now timeIntervalSinceDate:creationDate] > 3600) {
                     [fm removeItemAtPath:filePath error:nil];
                     NSLog(@"[TKMetaStripper] 成功清理过期缓存视频: %@", file);
@@ -37,14 +36,16 @@
 }
 
 - (NSURL *)createStrippedDecoyVideoFromURL:(NSURL *)originalURL {
-    // 每次执行洗白前，触发一次后台静默清理
     [self cleanOldDecoyVideosInBackground];
 
     if ([originalURL.path containsString:@"NSTemporaryDirectory"] || [originalURL.path containsString:@"TKCleaned"]) {
         return originalURL;
     }
 
-    AVURLAsset *asset = [AVURLAsset URLAssetWithURL:originalURL options:nil];
+    // 🔥 核心防御：向 Tweak.x 发送免死金牌，声明是自己人在读取
+    NSDictionary *bypassOptions = @{@"TK_BYPASS_HOOK": @YES};
+    AVURLAsset *asset = [[AVURLAsset alloc] initWithURL:originalURL options:bypassOptions];
+    
     if (!asset) return originalURL;
 
     NSString *uuid = [[NSUUID UUID] UUIDString];
@@ -60,7 +61,7 @@
     exportSession.outputURL = outputURL;
     exportSession.outputFileType = AVFileTypeMPEG4;
     
-    // 暴力清空所有元数据
+    // 暴力清空所有元数据 (核弹级洗白)
     exportSession.metadata = @[]; 
 
     dispatch_semaphore_t semaphore = dispatch_semaphore_create(0);
@@ -70,7 +71,6 @@
         dispatch_semaphore_signal(semaphore);
     }];
     
-    // 超时时间缩短为 10 秒，防止遇到超大异常文件时导致 UI 假死
     dispatch_time_t timeout = dispatch_time(DISPATCH_TIME_NOW, (int64_t)(10.0 * NSEC_PER_SEC));
     dispatch_semaphore_wait(semaphore, timeout);
 
