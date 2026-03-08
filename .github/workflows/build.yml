@@ -12,28 +12,28 @@ jobs:
       THEOS: ${{ github.workspace }}/theos
 
     steps:
-    - name: 1. 检出你的代码
+    - name: 1. 检出代码
       uses: actions/checkout@v4
 
-    - name: 2. 安装依赖环境 (ldid 和 dpkg)
+    - name: 2. 安装底层编译依赖 (ldid & dpkg)
       run: |
         brew install ldid dpkg
 
-    - name: 3. 在云端静默安装 Theos 编译环境
+    - name: 3. 安装 Theos 框架
       run: |
         git clone --recursive https://github.com/theos/theos.git $THEOS
 
-    - name: 4. 下载 iOS SDK (修复文件夹冲突)
+    - name: 4. 安装 iOS SDKs (处理默认空文件夹冲突)
       run: |
         rm -rf $THEOS/sdks
         git clone https://github.com/theos/sdks.git $THEOS/sdks
 
-    - name: 5. 编译 Release 正式版
+    - name: 5. 编译高安全无符号脱壳版 (Release)
       run: |
         make clean
         make FINALPACKAGE=1
 
-    - name: 6. 提取产物并生成下载链接
+    - name: 6. 提取纯净 .dylib 并生成下载
       uses: actions/upload-artifact@v4
       with:
         name: TKMetaStripper_Release_Dylib
