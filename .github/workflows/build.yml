@@ -28,30 +28,29 @@ jobs:
         rm -rf $THEOS/sdks
         git clone https://github.com/theos/sdks.git $THEOS/sdks
 
-    - name: 5. 编译、终极权限清洗并打包
+    - name: 5. 编译、精准装箱并打包
       run: |
         make clean
         make FINALPACKAGE=1
+        
+        # 确保 Payload 文件夹是干净的
+        rm -rf Payload
         mkdir -p Payload
-        cp -r .theos/obj/**/TKVideoCleaner.app Payload/
+        
+        # 🔥 核心致命错误修复：使用 -RL 精准提取唯一实体文件夹，彻底杜绝 App 俄罗斯套娃嵌套！
+        cp -RL .theos/obj/TKVideoCleaner.app Payload/
+        
+        # 注入身份配置
         cp Info.plist Payload/TKVideoCleaner.app/
         
-        # 🔥 终极白名单权限隔离机制
-        # A. 删除 Theos 可能残留的废弃签名文件夹
+        # 拔除 Theos 残留的废弃签名文件夹
         rm -rf Payload/TKVideoCleaner.app/_CodeSignature
         
-        # B. 目录赋予 755 穿透权限，保证巨魔能读取
-        find Payload/TKVideoCleaner.app -type d -exec chmod 755 {} +
-        
-        # C. 核心杀招：所有普通文件（包括 plist）强制设为 644 (剥夺所有执行权限)
+        # 权限物理隔离：剥夺所有杂乱文件的执行权限，只给核心大脑赋予执行权，确保巨魔 100% 成功解析
         find Payload/TKVideoCleaner.app -type f -exec chmod 644 {} +
-        
-        # D. 唯独给真正的二进制核心程序赋予 755 运行权限
         chmod 755 Payload/TKVideoCleaner.app/TKVideoCleaner
         
-        # E. 使用云端 ldid 进行一次预签名，重塑完美的 Mach-O 头部结构给巨魔看
-        ldid -S Payload/TKVideoCleaner.app/TKVideoCleaner
-        
+        # 最终打包
         zip -r TKVideoCleaner.ipa Payload
 
     - name: 6. 上传最终产物供下载
