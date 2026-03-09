@@ -18,6 +18,8 @@
 @property (nonatomic, strong) NSMutableArray<NSURL *> *successfullyCleanedURLs;
 @property (nonatomic, strong) NSMutableArray<PHAsset *> *assetsToDelete;
 
+@property (nonatomic, assign) NSInteger failedCount;
+
 @end
 
 @implementation TKAppViewController
@@ -25,6 +27,9 @@
 - (void)viewDidLoad {
     [super viewDidLoad];
     self.view.backgroundColor = [UIColor systemBackgroundColor];
+    
+    // 启动级底层垃圾回收，防止磁盘爆满
+    [self performGarbageCollection];
     
     self.countryData = @[
         @{@"name": @"🇩🇪 德国 (法兰克福)", @"gps": @"+50.1109+008.6821/"},
@@ -41,7 +46,7 @@
     self.statusLabel = [[UILabel alloc] initWithFrame:CGRectMake(20, 80, self.view.bounds.size.width - 40, 120)];
     self.statusLabel.numberOfLines = 0;
     self.statusLabel.textAlignment = NSTextAlignmentCenter;
-    self.statusLabel.text = @"V8 跨国中控矩阵就绪\n(支持持久化目标国记忆)\n请确保下方国家与您的节点IP一致";
+    self.statusLabel.text = @"V10 满血原生版就绪\n(1080P HEVC 原生编码 + 多国定位)\n完美对标真实 iPhone 极致画质";
     [self.view addSubview:self.statusLabel];
     
     self.countryButton = [UIButton buttonWithType:UIButtonTypeSystem];
@@ -72,6 +77,20 @@
     [PHPhotoLibrary requestAuthorization:^(PHAuthorizationStatus status) {}];
 }
 
+- (void)performGarbageCollection {
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_LOW, 0), ^{
+        NSString *tempDir = NSTemporaryDirectory();
+        NSFileManager *fm = [NSFileManager defaultManager];
+        NSArray *files = [fm contentsOfDirectoryAtPath:tempDir error:nil];
+        for (NSString *file in files) {
+            if ([file hasPrefix:@"Safe_"] || [file hasPrefix:@"TKCleaned_"]) {
+                [fm removeItemAtPath:[tempDir stringByAppendingPathComponent:file] error:nil];
+            }
+        }
+        NSLog(@"[TKVideoCleaner] 启动级磁盘清道夫已完毕。");
+    });
+}
+
 - (void)showCountryPicker {
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"🌍 切换矩阵目标国家"
                                                                    message:@"新生成的视频将烙印该国家的绝对物理GPS坐标"
@@ -79,10 +98,8 @@
     
     for (int i = 0; i < self.countryData.count; i++) {
         UIAlertAction *action = [UIAlertAction actionWithTitle:self.countryData[i][@"name"] style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
-            
             [[NSUserDefaults standardUserDefaults] setInteger:i forKey:@"TKTargetCountryIndex"];
             [[NSUserDefaults standardUserDefaults] synchronize];
-            
             [self.countryButton setTitle:[NSString stringWithFormat:@"🎯 当前目标区: %@", self.countryData[i][@"name"]] forState:UIControlStateNormal];
         }];
         [alert addAction:action];
@@ -91,7 +108,6 @@
     UIAlertAction *cancel = [UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil];
     [alert addAction:cancel];
     
-    // 🔥 修复点：使用现代 iOS API 获取设备类型
     if ([[UIDevice currentDevice] userInterfaceIdiom] == UIUserInterfaceIdiomPad) {
         alert.popoverPresentationController.sourceView = self.countryButton;
         alert.popoverPresentationController.sourceRect = self.countryButton.bounds;
@@ -122,6 +138,7 @@
     
     self.pendingResults = results;
     self.currentIndex = 0;
+    self.failedCount = 0; 
     self.successfullyCleanedURLs = [NSMutableArray array];
     self.assetsToDelete = [NSMutableArray array];
     
@@ -138,7 +155,7 @@
     }
     
     dispatch_async(dispatch_get_main_queue(), ^{
-        self.statusLabel.text = [NSString stringWithFormat:@"正在克隆第 %ld / %ld 个视频...\n(注入真实硬件指纹与目标国定位)", (long)(self.currentIndex + 1), (long)self.pendingResults.count];
+        self.statusLabel.text = [NSString stringWithFormat:@"正在克隆第 %ld / %ld 个视频...\n(满血 1080P HEVC 压制中，请耐心)", (long)(self.currentIndex + 1), (long)self.pendingResults.count];
     });
     
     PHPickerResult *result = self.pendingResults[self.currentIndex];
@@ -147,7 +164,10 @@
     PHAsset *originalAsset = fetchResult.firstObject;
     
     [result.itemProvider loadFileRepresentationForTypeIdentifier:@"public.movie" completionHandler:^(NSURL * _Nullable url, NSError * _Nullable error) {
-        if (!url) {
+        
+        if (!url || error) {
+            NSLog(@"[TKVideoCleaner] 视频源流提取失败: %@", error);
+            self.failedCount++;
             [self nextTick];
             return;
         }
@@ -157,7 +177,15 @@
         if ([[NSFileManager defaultManager] fileExistsAtPath:safeTempPath]) {
             [[NSFileManager defaultManager] removeItemAtPath:safeTempPath error:nil];
         }
-        [[NSFileManager defaultManager] copyItemAtURL:url toURL:safeURL error:nil];
+        
+        NSError *copyError = nil;
+        BOOL copySuccess = [[NSFileManager defaultManager] copyItemAtURL:url toURL:safeURL error:&copyError];
+        if (!copySuccess) {
+            NSLog(@"[TKVideoCleaner] 拷贝到沙盒失败: %@", copyError);
+            self.failedCount++;
+            [self nextTick];
+            return;
+        }
         
         [self executeCleanOnSafeURL:safeURL originalAsset:originalAsset];
     }];
@@ -174,7 +202,14 @@
             [[NSFileManager defaultManager] removeItemAtPath:outputPath error:nil];
         }
         
-        AVAssetExportSession *exportSession = [[AVAssetExportSession alloc] initWithAsset:asset presetName:AVAssetExportPreset1280x720];
+        // 🔥 核心重装：切回 1080P HEVC (H.265)，还原最强物理真实度
+        AVAssetExportSession *exportSession = [[AVAssetExportSession alloc] initWithAsset:asset presetName:AVAssetExportPresetHEVC1920x1080];
+        
+        // 极少部分异常原片如果不支持直接升维至 HEVC，增加一个底层保底的 H.264 1080P，防止崩溃
+        if (!exportSession) {
+            exportSession = [[AVAssetExportSession alloc] initWithAsset:asset presetName:AVAssetExportPreset1920x1080];
+        }
+        
         exportSession.outputURL = outputURL;
         exportSession.outputFileType = AVFileTypeQuickTimeMovie; 
         
@@ -218,11 +253,13 @@
         
         [exportSession exportAsynchronouslyWithCompletionHandler:^{
             [[NSFileManager defaultManager] removeItemAtURL:safeURL error:nil];
+            
             if (exportSession.status == AVAssetExportSessionStatusCompleted) {
                 [self.successfullyCleanedURLs addObject:outputURL];
                 if (originalAsset) [self.assetsToDelete addObject:originalAsset];
             } else {
-                NSLog(@"[TKVideoCleaner] 洗白失败: %@", exportSession.error.localizedDescription);
+                NSLog(@"[TKVideoCleaner] 底层重编码失败: %@", exportSession.error.localizedDescription);
+                self.failedCount++; 
             }
             [self nextTick];
         }];
@@ -238,12 +275,14 @@
 
 - (void)commitBatchChanges {
     dispatch_async(dispatch_get_main_queue(), ^{
-        self.statusLabel.text = @"全部克隆完毕！正在安全写入相册...";
+        self.statusLabel.text = @"全部压制完毕！正在执行安全入库事务...";
     });
+    
     if (self.successfullyCleanedURLs.count == 0) {
-        [self finalizeUIAndCleanupWithStatus:@"❌ 批处理失败：未能成功洗白任何视频。"];
+        [self finalizeUIAndCleanupWithStatus:[NSString stringWithFormat:@"❌ 批处理全军覆没。\n%ld 个视频全部洗白失败。", (long)self.failedCount]];
         return;
     }
+    
     [[PHPhotoLibrary sharedPhotoLibrary] performChanges:^{
         for (NSURL *url in self.successfullyCleanedURLs) {
             [PHAssetChangeRequest creationRequestForAssetFromVideoAtFileURL:url];
@@ -253,10 +292,14 @@
             [[PHPhotoLibrary sharedPhotoLibrary] performChanges:^{
                 [PHAssetChangeRequest deleteAssets:self.assetsToDelete];
             } completionHandler:^(BOOL deleteSuccess, NSError * _Nullable deleteError) {
-                [self finalizeUIAndCleanupWithStatus:deleteSuccess ? @"✅ 多国矩阵投送克隆完美收工！\n新片已入库，所有原片已彻底销毁。" : @"⚠️ 新片已批量保存！\n但您刚才拒绝了销毁，请手动删除旧原片防止泄漏！"];
+                NSString *finalStatus = [NSString stringWithFormat:@"%@\n成功: %ld 个 | 失败: %ld 个", 
+                                         deleteSuccess ? @"✅ 入库完美收工！旧片已销毁。" : @"⚠️ 新片已保存！但您拒绝了自动销毁旧片。",
+                                         (long)self.successfullyCleanedURLs.count,
+                                         (long)self.failedCount];
+                [self finalizeUIAndCleanupWithStatus:finalStatus];
             }];
         } else {
-            [self finalizeUIAndCleanupWithStatus:@"❌ 写入相册失败，未造成原文件丢失。请检查相册权限。"];
+            [self finalizeUIAndCleanupWithStatus:@"❌ 写入相册被系统拦截，请检查权限设置。"];
         }
     }];
 }
@@ -267,6 +310,7 @@
         self.selectButton.enabled = YES;
         self.countryButton.enabled = YES; 
         self.statusLabel.text = statusText;
+        
         for (NSURL *url in self.successfullyCleanedURLs) {
             [[NSFileManager defaultManager] removeItemAtURL:url error:nil];
         }
