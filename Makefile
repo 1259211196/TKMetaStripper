@@ -1,11 +1,14 @@
 TARGET := iphone:clang:latest:14.0
-INSTALL_TARGET_PROCESSES = TikTok Aweme
+INSTALL_TARGET_PROCESSES = TKVideoCleaner
 
 include $(THEOS)/makefiles/common.mk
 
-TWEAK_NAME = TKMetaStripper
+APPLICATION_NAME = TKVideoCleaner
 
-TKMetaStripper_FILES = Tweak.x TKEnvManager.m TKVideoCleaner.m
-TKMetaStripper_CFLAGS = -fobjc-arc
+# 核心编译文件
+TKVideoCleaner_FILES = main.m TKAppViewController.m
+# 必须引入的 iOS 系统底层框架
+TKVideoCleaner_FRAMEWORKS = UIKit AVFoundation Photos MobileCoreServices PhotosUI
+TKVideoCleaner_CFLAGS = -fobjc-arc
 
-include $(THEOS_MAKE_PATH)/tweak.mk
+include $(THEOS_MAKE_PATH)/application.mk
