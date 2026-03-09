@@ -1,106 +1,159 @@
-#import "TKVideoCleaner.h"
+#import <UIKit/UIKit.h>
 #import <AVFoundation/AVFoundation.h>
-#import <CommonCrypto/CommonDigest.h>
+#import <Photos/Photos.h>
+#import <PhotosUI/PhotosUI.h>
 
-@implementation TKVideoCleaner
+@interface TKAppViewController : UIViewController <PHPickerViewControllerDelegate>
+@property (nonatomic, strong) UIButton *selectButton;
+@property (nonatomic, strong) UIActivityIndicatorView *spinner;
+@property (nonatomic, strong) UILabel *statusLabel;
+@end
 
-+ (instancetype)sharedCleaner {
-    static TKVideoCleaner *shared = nil;
-    static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{
-        shared = [[self alloc] init];
-    });
-    return shared;
-}
+@implementation TKAppViewController
 
-// 🔥 修复点：将废弃的 MD5 升级为苹果推荐的 SHA-256，完美通过高版本 iOS SDK 编译校验
-- (NSString *)sha256StringForString:(NSString *)string {
-    const char *cstr = [string UTF8String];
-    unsigned char result[CC_SHA256_DIGEST_LENGTH];
-    CC_SHA256(cstr, (CC_LONG)strlen(cstr), result);
+- (void)viewDidLoad {
+    [super viewDidLoad];
+    self.view.backgroundColor = [UIColor systemBackgroundColor];
     
-    // 动态拼接 64 位的安全哈希字符串
-    NSMutableString *hashString = [NSMutableString stringWithCapacity:CC_SHA256_DIGEST_LENGTH * 2];
-    for (int i = 0; i < CC_SHA256_DIGEST_LENGTH; i++) {
-        [hashString appendFormat:@"%02x", result[i]];
-    }
-    return hashString;
+    // UI: 状态提示文字
+    self.statusLabel = [[UILabel alloc] initWithFrame:CGRectMake(20, 100, self.view.bounds.size.width - 40, 120)];
+    self.statusLabel.numberOfLines = 0;
+    self.statusLabel.textAlignment = NSTextAlignmentCenter;
+    self.statusLabel.text = @"等待选择视频...\n(矩阵防封基建：物理气隙隔离版)\n洗白后将自动销毁原片";
+    [self.view addSubview:self.statusLabel];
+    
+    // UI: 醒目的红色操作按钮
+    self.selectButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    self.selectButton.frame = CGRectMake(50, 260, self.view.bounds.size.width - 100, 55);
+    [self.selectButton setTitle:@"选择视频并执行无痕洗白" forState:UIControlStateNormal];
+    self.selectButton.backgroundColor = [UIColor systemRedColor];
+    self.selectButton.titleLabel.font = [UIFont boldSystemFontOfSize:16];
+    [self.selectButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+    self.selectButton.layer.cornerRadius = 12;
+    [self.selectButton addTarget:self action:@selector(selectVideoTapped) forControlEvents:UIControlEventTouchUpInside];
+    [self.view addSubview:self.selectButton];
+    
+    // UI: 菊花加载动画
+    self.spinner = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleLarge];
+    self.spinner.center = CGPointMake(self.view.bounds.size.width/2, 380);
+    self.spinner.hidesWhenStopped = YES;
+    [self.view addSubview:self.spinner];
+    
+    // 提前向系统静默请求相册最高读写权限
+    [PHPhotoLibrary requestAuthorization:^(PHAuthorizationStatus status) {}];
 }
 
-- (void)cleanOldDecoyVideosInBackground {
-    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_BACKGROUND, 0), ^{
-        NSFileManager *fm = [NSFileManager defaultManager];
-        NSString *tempDir = NSTemporaryDirectory();
-        NSArray *files = [fm contentsOfDirectoryAtPath:tempDir error:nil];
-        NSDate *now = [NSDate date];
-        
-        for (NSString *file in files) {
-            if ([file hasPrefix:@"TKCleaned_"]) {
-                NSString *filePath = [tempDir stringByAppendingPathComponent:file];
-                NSDictionary *attrs = [fm attributesOfItemAtPath:filePath error:nil];
-                NSDate *creationDate = [attrs fileCreationDate];
-                
-                if (creationDate && [now timeIntervalSinceDate:creationDate] > 3600) {
-                    [fm removeItemAtPath:filePath error:nil];
-                    NSLog(@"[TKMetaStripper] 成功清理过期缓存视频: %@", file);
-                }
-            }
+- (void)selectVideoTapped {
+    // 使用 iOS 14+ 的现代化相册组件，防止系统偷偷在后台二压视频
+    PHPickerConfiguration *config = [[PHPickerConfiguration alloc] initWithPhotoLibrary:[PHPhotoLibrary sharedPhotoLibrary]];
+    config.filter = [PHPickerFilter videosFilter];
+    config.selectionLimit = 1;
+    
+    PHPickerViewController *picker = [[PHPickerViewController alloc] initWithConfiguration:config];
+    picker.delegate = self;
+    [self presentViewController:picker animated:YES completion:nil];
+}
+
+- (void)picker:(PHPickerViewController *)picker didFinishPicking:(NSArray<PHPickerResult *> *)results {
+    [picker dismissViewControllerAnimated:YES completion:nil];
+    
+    if (results.count == 0) return;
+    
+    PHPickerResult *result = results.firstObject;
+    NSString *assetIdentifier = result.assetIdentifier;
+    
+    if (!assetIdentifier) {
+        self.statusLabel.text = @"无法获取原视频底层物理凭证，请换一个视频重试。";
+        return;
+    }
+    
+    // 锁定相册中带定位痕迹的原始视频身份（留作一会儿销毁用）
+    PHFetchResult<PHAsset *> *fetchResult = [PHAsset fetchAssetsWithLocalIdentifiers:@[assetIdentifier] options:nil];
+    PHAsset *originalAsset = fetchResult.firstObject;
+    
+    // 提取纯净的原始数据流
+    [result.itemProvider loadFileRepresentationForTypeIdentifier:@"public.movie" completionHandler:^(NSURL * _Nullable url, NSError * _Nullable error) {
+        if (url && originalAsset) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                [self processAndCleanVideo:url originalAsset:originalAsset];
+            });
         }
+    }];
+}
+
+- (void)processAndCleanVideo:(NSURL *)originalURL originalAsset:(PHAsset *)originalAsset {
+    self.selectButton.enabled = NO;
+    self.statusLabel.text = @"🚀 正在进行工业级 HEVC 硬件重编码...\n(正在重构底层指纹，请勿退出 App)";
+    [self.spinner startAnimating];
+    
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_HIGH, 0), ^{
+        AVURLAsset *asset = [[AVURLAsset alloc] initWithURL:originalURL options:nil];
+        NSString *tempDir = NSTemporaryDirectory();
+        NSString *outputPath = [tempDir stringByAppendingPathComponent:[NSString stringWithFormat:@"TKCleaned_%@.mov", [[NSUUID UUID] UUIDString]]];
+        NSURL *outputURL = [NSURL fileURLWithPath:outputPath];
+        
+        if ([[NSFileManager defaultManager] fileExistsAtPath:outputPath]) {
+            [[NSFileManager defaultManager] removeItemAtPath:outputPath error:nil];
+        }
+        
+        // 核心洗白：模拟最新款 iPhone 拍摄的 1080P HEVC (H.265) 格式
+        AVAssetExportSession *exportSession = [[AVAssetExportSession alloc] initWithAsset:asset presetName:AVAssetExportPresetHEVC1920x1080];
+        if (!exportSession) {
+            exportSession = [[AVAssetExportSession alloc] initWithAsset:asset presetName:AVAssetExportPreset1920x1080];
+        }
+        
+        exportSession.outputURL = outputURL;
+        exportSession.outputFileType = AVFileTypeQuickTimeMovie; // .mov 强封装
+        exportSession.metadata = @[]; // EXIF、GPS、系统印记核弹级清空
+        
+        [exportSession exportAsynchronouslyWithCompletionHandler:^{
+            dispatch_async(dispatch_get_main_queue(), ^{
+                if (exportSession.status == AVAssetExportSessionStatusCompleted) {
+                    [self saveVideoAndRemoveOriginalSafely:outputURL originalAsset:originalAsset];
+                } else {
+                    [self.spinner stopAnimating];
+                    self.selectButton.enabled = YES;
+                    self.statusLabel.text = [NSString stringWithFormat:@"❌ 洗白失败: %@", exportSession.error.localizedDescription];
+                }
+            });
+        }];
     });
 }
 
-- (NSURL *)createStrippedDecoyVideoFromURL:(NSURL *)originalURL {
-    [self cleanOldDecoyVideosInBackground];
-
-    if ([originalURL.path containsString:@"NSTemporaryDirectory"] || [originalURL.path containsString:@"TKCleaned"]) {
-        return originalURL;
-    }
-
-    NSString *tempDir = NSTemporaryDirectory();
-    // 使用新的 SHA-256 算法生成极其安全的替身文件名
-    NSString *fileHash = [self sha256StringForString:originalURL.path];
-    NSString *outputPath = [tempDir stringByAppendingPathComponent:[NSString stringWithFormat:@"TKCleaned_%@.mov", fileHash]];
-    NSURL *outputURL = [NSURL fileURLWithPath:outputPath];
-
-    // 秒级缓存命中放行
-    if ([[NSFileManager defaultManager] fileExistsAtPath:outputPath]) {
-        NSLog(@"[TKMetaStripper] 缓存命中！TikTok 再次读取，直接秒回 HEVC 替身: %@", outputURL);
-        return outputURL;
-    }
-
-    NSDictionary *bypassOptions = @{@"TK_BYPASS_HOOK": @YES};
-    AVURLAsset *asset = [[AVURLAsset alloc] initWithURL:originalURL options:bypassOptions];
-    if (!asset) return originalURL;
-
-    // 锁定 1080P HEVC 以匹配 TikTok 上限，避开卡顿监控
-    AVAssetExportSession *exportSession = [[AVAssetExportSession alloc] initWithAsset:asset presetName:AVAssetExportPresetHEVC1920x1080];
+// 核心防御：分离式安全落库机制，确保永不丢片
+- (void)saveVideoAndRemoveOriginalSafely:(NSURL *)newVideoURL originalAsset:(PHAsset *)originalAsset {
+    self.statusLabel.text = @"✅ 重编码完成！正在安全写入系统相册...";
     
-    if (!exportSession) {
-        exportSession = [[AVAssetExportSession alloc] initWithAsset:asset presetName:AVAssetExportPreset1920x1080];
-        NSLog(@"[TKMetaStripper] 设备太老，已降级为 1080P H.264 原生重编码");
-    }
-
-    exportSession.outputURL = outputURL;
-    exportSession.outputFileType = AVFileTypeQuickTimeMovie; 
-    exportSession.metadata = @[]; 
-
-    dispatch_semaphore_t semaphore = dispatch_semaphore_create(0);
-    
-    NSLog(@"[TKMetaStripper] 开启原生 1080P HEVC 极速重制引擎...");
-    [exportSession exportAsynchronouslyWithCompletionHandler:^{
-        dispatch_semaphore_signal(semaphore);
+    // 步骤一：绝对优先保存纯净新片
+    [[PHPhotoLibrary sharedPhotoLibrary] performChanges:^{
+        [PHAssetChangeRequest creationRequestForAssetFromVideoAtFileURL:newVideoURL];
+    } completionHandler:^(BOOL saveSuccess, NSError * _Nullable saveError) {
+        if (saveSuccess) {
+            // 步骤二：新片落袋为安后，再弹窗请求销毁老片
+            [[PHPhotoLibrary sharedPhotoLibrary] performChanges:^{
+                [PHAssetChangeRequest deleteAssets:@[originalAsset]];
+            } completionHandler:^(BOOL deleteSuccess, NSError * _Nullable deleteError) {
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    [self.spinner stopAnimating];
+                    self.selectButton.enabled = YES;
+                    
+                    // 打扫战场，清理临时垃圾
+                    [[NSFileManager defaultManager] removeItemAtURL:newVideoURL error:nil];
+                    
+                    if (deleteSuccess) {
+                        self.statusLabel.text = @"🎉 完美替换！\n纯净版已安全入库，带定位痕迹的原片已彻底销毁！现在可直接去 TikTok 发布。";
+                    } else {
+                        self.statusLabel.text = @"⚠️ 新片已保存！\n但您刚才未允许删除，系统保留了原文件。请手动前往相册删除旧原片防泄露！";
+                    }
+                });
+            }];
+        } else {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                [self.spinner stopAnimating];
+                self.selectButton.enabled = YES;
+                self.statusLabel.text = @"❌ 保存新视频到相册失败，未造成原文件丢失。请检查手机存储空间或权限。";
+            });
+        }
     }];
-    
-    dispatch_time_t timeout = dispatch_time(DISPATCH_TIME_NOW, (int64_t)(15.0 * NSEC_PER_SEC));
-    dispatch_semaphore_wait(semaphore, timeout);
-
-    if (exportSession.status == AVAssetExportSessionStatusCompleted) {
-        NSLog(@"[TKMetaStripper] HEVC 重制圆满完成，完全洗白！");
-        return outputURL;
-    } else {
-        NSLog(@"[TKMetaStripper] 重制失败: %@。强制放行原文件保全 UI。", exportSession.error);
-    }
-    
-    return nil; 
 }
 @end
