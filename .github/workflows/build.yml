@@ -28,14 +28,20 @@ jobs:
         rm -rf $THEOS/sdks
         git clone https://github.com/theos/sdks.git $THEOS/sdks
 
-    - name: 5. 编译并打包为纯净 IPA
+    - name: 5. 编译、清洗权限并打包
       run: |
         make clean
         make FINALPACKAGE=1
         mkdir -p Payload
         cp -r .theos/obj/**/TKVideoCleaner.app Payload/
-        # 🔥 核心修复：强行将 Info.plist 植入 App 包内部，完美解决巨魔 302 报错
         cp Info.plist Payload/TKVideoCleaner.app/
+        
+        # 🔥 核心修复：权限大清洗，解决巨魔 175 报错
+        # 1. 强行剥夺所有文件的可执行权限
+        find Payload/TKVideoCleaner.app -type f -exec chmod -x {} +
+        # 2. 唯独给真正的二进制核心文件赋予可执行权限
+        chmod +x Payload/TKVideoCleaner.app/TKVideoCleaner
+        
         zip -r TKVideoCleaner.ipa Payload
 
     - name: 6. 上传最终产物供下载
