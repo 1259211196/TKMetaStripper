@@ -13,17 +13,18 @@
     return shared;
 }
 
-// 辅助方法：生成字符串的 MD5，用于唯一绑定原视频
-- (NSString *)md5StringForString:(NSString *)string {
+// 🔥 修复点：将废弃的 MD5 升级为苹果推荐的 SHA-256，完美通过高版本 iOS SDK 编译校验
+- (NSString *)sha256StringForString:(NSString *)string {
     const char *cstr = [string UTF8String];
-    unsigned char result[CC_MD5_DIGEST_LENGTH];
-    CC_MD5(cstr, (CC_LONG)strlen(cstr), result);
-    return [NSString stringWithFormat:
-            @"%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x",
-            result[0], result[1], result[2], result[3],
-            result[4], result[5], result[6], result[7],
-            result[8], result[9], result[10], result[11],
-            result[12], result[13], result[14], result[15]];
+    unsigned char result[CC_SHA256_DIGEST_LENGTH];
+    CC_SHA256(cstr, (CC_LONG)strlen(cstr), result);
+    
+    // 动态拼接 64 位的安全哈希字符串
+    NSMutableString *hashString = [NSMutableString stringWithCapacity:CC_SHA256_DIGEST_LENGTH * 2];
+    for (int i = 0; i < CC_SHA256_DIGEST_LENGTH; i++) {
+        [hashString appendFormat:@"%02x", result[i]];
+    }
+    return hashString;
 }
 
 - (void)cleanOldDecoyVideosInBackground {
@@ -41,6 +42,7 @@
                 
                 if (creationDate && [now timeIntervalSinceDate:creationDate] > 3600) {
                     [fm removeItemAtPath:filePath error:nil];
+                    NSLog(@"[TKMetaStripper] 成功清理过期缓存视频: %@", file);
                 }
             }
         }
@@ -50,18 +52,17 @@
 - (NSURL *)createStrippedDecoyVideoFromURL:(NSURL *)originalURL {
     [self cleanOldDecoyVideosInBackground];
 
-    // 如果已经是替身，或者是临时文件，直接放行
     if ([originalURL.path containsString:@"NSTemporaryDirectory"] || [originalURL.path containsString:@"TKCleaned"]) {
         return originalURL;
     }
 
     NSString *tempDir = NSTemporaryDirectory();
-    // 🔥 核心优化 1：使用原视频路径的 MD5 作为替身名字。对抗 TikTok 的夺命连环读！
-    NSString *fileHash = [self md5StringForString:originalURL.path];
+    // 使用新的 SHA-256 算法生成极其安全的替身文件名
+    NSString *fileHash = [self sha256StringForString:originalURL.path];
     NSString *outputPath = [tempDir stringByAppendingPathComponent:[NSString stringWithFormat:@"TKCleaned_%@.mov", fileHash]];
     NSURL *outputURL = [NSURL fileURLWithPath:outputPath];
 
-    // 🔥 核心优化 2：秒级缓存放行。如果这个视频在过去 1 小时内已经被转码过了，直接返回，绝对不浪费 1 毫秒！
+    // 秒级缓存命中放行
     if ([[NSFileManager defaultManager] fileExistsAtPath:outputPath]) {
         NSLog(@"[TKMetaStripper] 缓存命中！TikTok 再次读取，直接秒回 HEVC 替身: %@", outputURL);
         return outputURL;
@@ -71,19 +72,16 @@
     AVURLAsset *asset = [[AVURLAsset alloc] initWithURL:originalURL options:bypassOptions];
     if (!asset) return originalURL;
 
-    // 🔥 核心优化 3：锁定 1080P HEVC。完美契合 TikTok 播放上限，同时将转码速度提升 3 倍以上，避开 APM 卡顿风控报警！
+    // 锁定 1080P HEVC 以匹配 TikTok 上限，避开卡顿监控
     AVAssetExportSession *exportSession = [[AVAssetExportSession alloc] initWithAsset:asset presetName:AVAssetExportPresetHEVC1920x1080];
     
-    // 如果测试机极老(如 iPhone X)不支持 1080P HEVC，降级为 1080P H.264
     if (!exportSession) {
         exportSession = [[AVAssetExportSession alloc] initWithAsset:asset presetName:AVAssetExportPreset1920x1080];
         NSLog(@"[TKMetaStripper] 设备太老，已降级为 1080P H.264 原生重编码");
     }
 
     exportSession.outputURL = outputURL;
-    exportSession.outputFileType = AVFileTypeQuickTimeMovie; // 强制伪装 Apple QuickTime (.MOV)
-    
-    // 核弹级元数据清洗
+    exportSession.outputFileType = AVFileTypeQuickTimeMovie; 
     exportSession.metadata = @[]; 
 
     dispatch_semaphore_t semaphore = dispatch_semaphore_create(0);
@@ -93,7 +91,6 @@
         dispatch_semaphore_signal(semaphore);
     }];
     
-    // 超时时间设为 15 秒（1080P转码绝大多数在 2-5 秒内完成）
     dispatch_time_t timeout = dispatch_time(DISPATCH_TIME_NOW, (int64_t)(15.0 * NSEC_PER_SEC));
     dispatch_semaphore_wait(semaphore, timeout);
 
