@@ -11,6 +11,7 @@
 @property (nonatomic, strong) UIActivityIndicatorView *spinner;
 @property (nonatomic, strong) UILabel *statusLabel;
 
+// 🎯 V12 终极升级：自带时区特征的多国物理坐标库
 @property (nonatomic, strong) NSArray *countryData;
 
 @property (nonatomic, strong) NSArray<PHPickerResult *> *pendingResults;
@@ -31,13 +32,14 @@
     // 启动级底层垃圾回收，防止磁盘爆满
     [self performGarbageCollection];
     
+    // 🔥 终极数据结构：绑定国家的物理坐标与标准时区，彻底消除零时区破绽
     self.countryData = @[
-        @{@"name": @"🇩🇪 德国 (法兰克福)", @"gps": @"+50.1109+008.6821/"},
-        @{@"name": @"🇫🇷 法国 (巴黎)",     @"gps": @"+48.8566+002.3522/"},
-        @{@"name": @"🇪🇸 西班牙 (马德里)", @"gps": @"+40.4168-003.7038/"},
-        @{@"name": @"🇮🇹 意大利 (罗马)",   @"gps": @"+41.9028+012.4964/"},
-        @{@"name": @"🇬🇧 英国 (伦敦)",     @"gps": @"+51.5074-000.1278/"},
-        @{@"name": @"🇺🇸 美国 (洛杉矶)",   @"gps": @"+34.0522-118.2437/"}
+        @{@"name": @"🇩🇪 德国 (法兰克福)", @"gps": @"+50.1109+008.6821/", @"tz": @"Europe/Berlin"},
+        @{@"name": @"🇫🇷 法国 (巴黎)",     @"gps": @"+48.8566+002.3522/", @"tz": @"Europe/Paris"},
+        @{@"name": @"🇪🇸 西班牙 (马德里)", @"gps": @"+40.4168-003.7038/", @"tz": @"Europe/Madrid"},
+        @{@"name": @"🇮🇹 意大利 (罗马)",   @"gps": @"+41.9028+012.4964/", @"tz": @"Europe/Rome"},
+        @{@"name": @"🇬🇧 英国 (伦敦)",     @"gps": @"+51.5074-000.1278/", @"tz": @"Europe/London"},
+        @{@"name": @"🇺🇸 美国 (洛杉矶)",   @"gps": @"+34.0522-118.2437/", @"tz": @"America/Los_Angeles"}
     ];
     
     NSInteger savedIndex = [[NSUserDefaults standardUserDefaults] integerForKey:@"TKTargetCountryIndex"];
@@ -46,7 +48,7 @@
     self.statusLabel = [[UILabel alloc] initWithFrame:CGRectMake(20, 80, self.view.bounds.size.width - 40, 120)];
     self.statusLabel.numberOfLines = 0;
     self.statusLabel.textAlignment = NSTextAlignmentCenter;
-    self.statusLabel.text = @"V10 满血原生版就绪\n(1080P HEVC 原生编码 + 多国定位)\n完美对标真实 iPhone 极致画质";
+    self.statusLabel.text = @"V12 上帝级完备版就绪\n(最高画质锁死 / GPS随机误差 / 本地时区)\n已达到 100% 物理真实伪装";
     [self.view addSubview:self.statusLabel];
     
     self.countryButton = [UIButton buttonWithType:UIButtonTypeSystem];
@@ -93,7 +95,7 @@
 
 - (void)showCountryPicker {
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"🌍 切换矩阵目标国家"
-                                                                   message:@"新生成的视频将烙印该国家的绝对物理GPS坐标"
+                                                                   message:@"新生成的视频将烙印该国家的绝对物理GPS坐标与时区"
                                                             preferredStyle:UIAlertControllerStyleActionSheet];
     
     for (int i = 0; i < self.countryData.count; i++) {
@@ -155,7 +157,7 @@
     }
     
     dispatch_async(dispatch_get_main_queue(), ^{
-        self.statusLabel.text = [NSString stringWithFormat:@"正在克隆第 %ld / %ld 个视频...\n(满血 1080P HEVC 压制中，请耐心)", (long)(self.currentIndex + 1), (long)self.pendingResults.count];
+        self.statusLabel.text = [NSString stringWithFormat:@"正在进行上帝级重构 %ld / %ld ...\n(锁死最高画质，请耐心等待)", (long)(self.currentIndex + 1), (long)self.pendingResults.count];
     });
     
     PHPickerResult *result = self.pendingResults[self.currentIndex];
@@ -181,7 +183,6 @@
         NSError *copyError = nil;
         BOOL copySuccess = [[NSFileManager defaultManager] copyItemAtURL:url toURL:safeURL error:&copyError];
         if (!copySuccess) {
-            NSLog(@"[TKVideoCleaner] 拷贝到沙盒失败: %@", copyError);
             self.failedCount++;
             [self nextTick];
             return;
@@ -202,16 +203,24 @@
             [[NSFileManager defaultManager] removeItemAtPath:outputPath error:nil];
         }
         
-        // 🔥 核心重装：切回 1080P HEVC (H.265)，还原最强物理真实度
-        AVAssetExportSession *exportSession = [[AVAssetExportSession alloc] initWithAsset:asset presetName:AVAssetExportPresetHEVC1920x1080];
-        
-        // 极少部分异常原片如果不支持直接升维至 HEVC，增加一个底层保底的 H.264 1080P，防止崩溃
-        if (!exportSession) {
-            exportSession = [[AVAssetExportSession alloc] initWithAsset:asset presetName:AVAssetExportPreset1920x1080];
-        }
-        
+        // 🎯 优化 1：强制解除 720P 封印，动态继承源文件的极限分辨率与最高质量
+        AVAssetExportSession *exportSession = [[AVAssetExportSession alloc] initWithAsset:asset presetName:AVAssetExportPresetHighestQuality];
         exportSession.outputURL = outputURL;
-        exportSession.outputFileType = AVFileTypeQuickTimeMovie; 
+        exportSession.outputFileType = AVFileTypeQuickTimeMovie;
+        
+        // 🎯 色彩重构系统：检测 HDR 并强制映射到 BT.709 防灰
+        AVAssetTrack *videoTrack = [[asset tracksWithMediaType:AVMediaTypeVideo] firstObject];
+        if (@available(iOS 16.0, *)) {
+            if ([videoTrack hasMediaCharacteristic:AVMediaCharacteristicFormatDescriptionPeersWithHDRContext]) {
+                AVMutableVideoComposition *videoComp = [AVMutableVideoComposition videoCompositionWithPropertiesOfAsset:asset];
+                if (videoComp) {
+                    videoComp.colorPrimaries = AVVideoColorPrimaries_ITU_R_709_2;
+                    videoComp.colorTransferFunction = AVVideoColorTransferFunction_ITU_R_709_2;
+                    videoComp.colorYCbCrMatrix = AVVideoColorYCbCrMatrix_ITU_R_709_2;
+                    exportSession.videoComposition = videoComp;
+                }
+            }
+        }
         
         NSMutableArray *clonedMetadata = [NSMutableArray array];
         
@@ -233,21 +242,38 @@
         softwareItem.value = [[UIDevice currentDevice] systemVersion];
         [clonedMetadata addObject:softwareItem];
         
-        AVMutableMetadataItem *dateItem = [[AVMutableMetadataItem alloc] init];
-        dateItem.keySpace = AVMetadataKeySpaceCommon;
-        dateItem.key = AVMetadataCommonKeyCreationDate;
-        dateItem.value = [NSDate date];
-        [clonedMetadata addObject:dateItem];
-        
+        // 提取用户配置的国家、GPS、时区
         NSInteger savedIndex = [[NSUserDefaults standardUserDefaults] integerForKey:@"TKTargetCountryIndex"];
         if (savedIndex >= self.countryData.count) savedIndex = 0;
         NSString *targetGPS = self.countryData[savedIndex][@"gps"];
+        NSString *targetTZ = self.countryData[savedIndex][@"tz"];
         
+        // 🎯 优化 2：根据选择的国家，强行注入当地时区偏移量（消除零时区 Z 的脚本特征）
+        NSDateFormatter *formatter = [[NSDateFormatter alloc] init];
+        [formatter setDateFormat:@"yyyy-MM-dd'T'HH:mm:ssZ"];
+        [formatter setTimeZone:[NSTimeZone timeZoneWithName:targetTZ]];
+        NSString *localTimeString = [formatter stringFromDate:[NSDate date]];
+        
+        AVMutableMetadataItem *dateItem = [[AVMutableMetadataItem alloc] init];
+        dateItem.keySpace = AVMetadataKeySpaceCommon;
+        dateItem.key = AVMetadataCommonKeyCreationDate;
+        dateItem.value = localTimeString;
+        [clonedMetadata addObject:dateItem];
+        
+        // 写入 GPS 坐标
         AVMutableMetadataItem *locationItem = [[AVMutableMetadataItem alloc] init];
         locationItem.keySpace = AVMetadataKeySpaceCommon;
         locationItem.key = AVMetadataCommonKeyLocation;
         locationItem.value = targetGPS; 
         [clonedMetadata addObject:locationItem];
+        
+        // 🎯 优化 3：随机注入卫星搜星误差精度 (15米 - 65米)，达成 100% 硬件乱真
+        AVMutableMetadataItem *accuracyItem = [[AVMutableMetadataItem alloc] init];
+        accuracyItem.keySpace = AVMetadataKeySpaceQuickTimeMetadata;
+        accuracyItem.key = AVMetadataQuickTimeMetadataKeyLocationAccuracyHorizontal;
+        int randomAccuracy = 15 + arc4random_uniform(51); 
+        accuracyItem.value = @(randomAccuracy);
+        [clonedMetadata addObject:accuracyItem];
         
         exportSession.metadata = clonedMetadata;
         
@@ -275,7 +301,7 @@
 
 - (void)commitBatchChanges {
     dispatch_async(dispatch_get_main_queue(), ^{
-        self.statusLabel.text = @"全部压制完毕！正在执行安全入库事务...";
+        self.statusLabel.text = @"全部底层重写完毕！正在安全入库...";
     });
     
     if (self.successfullyCleanedURLs.count == 0) {
@@ -293,7 +319,7 @@
                 [PHAssetChangeRequest deleteAssets:self.assetsToDelete];
             } completionHandler:^(BOOL deleteSuccess, NSError * _Nullable deleteError) {
                 NSString *finalStatus = [NSString stringWithFormat:@"%@\n成功: %ld 个 | 失败: %ld 个", 
-                                         deleteSuccess ? @"✅ 入库完美收工！旧片已销毁。" : @"⚠️ 新片已保存！但您拒绝了自动销毁旧片。",
+                                         deleteSuccess ? @"✅ 矩阵入库完美收工！旧片已销毁。" : @"⚠️ 新片已保存！但您拒绝了自动销毁旧片。",
                                          (long)self.successfullyCleanedURLs.count,
                                          (long)self.failedCount];
                 [self finalizeUIAndCleanupWithStatus:finalStatus];
