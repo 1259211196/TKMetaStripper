@@ -34,6 +34,8 @@ jobs:
         make FINALPACKAGE=1
         mkdir -p Payload
         cp -r .theos/obj/**/TKVideoCleaner.app Payload/
+        # 🔥 核心修复：强行将 Info.plist 植入 App 包内部，完美解决巨魔 302 报错
+        cp Info.plist Payload/TKVideoCleaner.app/
         zip -r TKVideoCleaner.ipa Payload
 
     - name: 6. 上传最终产物供下载
