@@ -2,14 +2,19 @@
 #import <AVFoundation/AVFoundation.h>
 #import <Photos/Photos.h>
 #import <PhotosUI/PhotosUI.h>
-#import <sys/utsname.h> // 🔥 引入底层 C 语言库，用于获取主板真实硬件代号
+#import <sys/utsname.h>
 
 @interface TKAppViewController : UIViewController <PHPickerViewControllerDelegate>
 
 @property (nonatomic, strong) UIButton *selectButton;
+@property (nonatomic, strong) UIButton *countryButton; // 新增：国家选择按钮
 @property (nonatomic, strong) UIActivityIndicatorView *spinner;
 @property (nonatomic, strong) UILabel *statusLabel;
 
+// 跨国坐标数据库
+@property (nonatomic, strong) NSArray *countryData;
+
+// 批量队列参数
 @property (nonatomic, strong) NSArray<PHPickerResult *> *pendingResults;
 @property (nonatomic, assign) NSInteger currentIndex;
 @property (nonatomic, strong) NSMutableArray<NSURL *> *successfullyCleanedURLs;
@@ -23,15 +28,41 @@
     [super viewDidLoad];
     self.view.backgroundColor = [UIColor systemBackgroundColor];
     
-    self.statusLabel = [[UILabel alloc] initWithFrame:CGRectMake(20, 100, self.view.bounds.size.width - 40, 150)];
+    // 1. 初始化全球坐标矩阵数据库 (ISO-6709 标准)
+    self.countryData = @[
+        @{@"name": @"🇩🇪 德国 (法兰克福)", @"gps": @"+50.1109+008.6821/"},
+        @{@"name": @"🇫🇷 法国 (巴黎)",     @"gps": @"+48.8566+002.3522/"},
+        @{@"name": @"🇪🇸 西班牙 (马德里)", @"gps": @"+40.4168-003.7038/"},
+        @{@"name": @"🇮🇹 意大利 (罗马)",   @"gps": @"+41.9028+012.4964/"},
+        @{@"name": @"🇬🇧 英国 (伦敦)",     @"gps": @"+51.5074-000.1278/"},
+        @{@"name": @"🇺🇸 美国 (洛杉矶)",   @"gps": @"+34.0522-118.2437/"}
+    ];
+    
+    // 2. 读取持久化记忆 (如果第一次打开，默认是 0 即德国)
+    NSInteger savedIndex = [[NSUserDefaults standardUserDefaults] integerForKey:@"TKTargetCountryIndex"];
+    if (savedIndex >= self.countryData.count) savedIndex = 0; // 防越界保护
+    
+    self.statusLabel = [[UILabel alloc] initWithFrame:CGRectMake(20, 80, self.view.bounds.size.width - 40, 120)];
     self.statusLabel.numberOfLines = 0;
     self.statusLabel.textAlignment = NSTextAlignmentCenter;
-    self.statusLabel.text = @"V7 上帝伪造版就绪\n(100% 真实主板指纹克隆)\n完美伪装原生拍摄，对抗终极查重";
+    self.statusLabel.text = @"V8 跨国中控矩阵就绪\n(支持持久化目标国记忆)\n请确保下方国家与您的节点IP一致";
     [self.view addSubview:self.statusLabel];
     
+    // 3. 渲染国家选择按钮
+    self.countryButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    self.countryButton.frame = CGRectMake(50, 220, self.view.bounds.size.width - 100, 45);
+    [self.countryButton setTitle:[NSString stringWithFormat:@"🎯 当前目标区: %@", self.countryData[savedIndex][@"name"]] forState:UIControlStateNormal];
+    self.countryButton.backgroundColor = [UIColor systemGray6Color];
+    [self.countryButton setTitleColor:[UIColor systemBlueColor] forState:UIControlStateNormal];
+    self.countryButton.layer.cornerRadius = 10;
+    self.countryButton.titleLabel.font = [UIFont boldSystemFontOfSize:15];
+    [self.countryButton addTarget:self action:@selector(showCountryPicker) forControlEvents:UIControlEventTouchUpInside];
+    [self.view addSubview:self.countryButton];
+    
+    // 4. 渲染核心洗白按钮
     self.selectButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    self.selectButton.frame = CGRectMake(50, 280, self.view.bounds.size.width - 100, 55);
-    [self.selectButton setTitle:@"执行 100% 真机克隆洗白" forState:UIControlStateNormal];
+    self.selectButton.frame = CGRectMake(50, 285, self.view.bounds.size.width - 100, 55);
+    [self.selectButton setTitle:@"开始 100% 真机克隆洗白" forState:UIControlStateNormal];
     self.selectButton.backgroundColor = [UIColor systemRedColor];
     self.selectButton.titleLabel.font = [UIFont boldSystemFontOfSize:16];
     [self.selectButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
@@ -47,7 +78,37 @@
     [PHPhotoLibrary requestAuthorization:^(PHAuthorizationStatus status) {}];
 }
 
-// 🔥 核心底层方法：获取当前设备的真实主板硬件代号 (如 iPhone14,2)
+// 唤起底部国家选择面板
+- (void)showCountryPicker {
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"🌍 切换矩阵目标国家"
+                                                                   message:@"新生成的视频将烙印该国家的绝对物理GPS坐标"
+                                                            preferredStyle:UIAlertControllerStyleActionSheet];
+    
+    for (int i = 0; i < self.countryData.count; i++) {
+        UIAlertAction *action = [UIAlertAction actionWithTitle:self.countryData[i][@"name"] style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+            
+            // 🔥 核心记忆写入：保存用户选择到系统底层沙盒
+            [[NSUserDefaults standardUserDefaults] setInteger:i forKey:@"TKTargetCountryIndex"];
+            [[NSUserDefaults standardUserDefaults] synchronize];
+            
+            // 更新 UI 显示
+            [self.countryButton setTitle:[NSString stringWithFormat:@"🎯 当前目标区: %@", self.countryData[i][@"name"]] forState:UIControlStateNormal];
+        }];
+        [alert addAction:action];
+    }
+    
+    UIAlertAction *cancel = [UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil];
+    [alert addAction:cancel];
+    
+    // 兼容 iPad 防崩溃
+    if (UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPad) {
+        alert.popoverPresentationController.sourceView = self.countryButton;
+        alert.popoverPresentationController.sourceRect = self.countryButton.bounds;
+    }
+    
+    [self presentViewController:alert animated:YES completion:nil];
+}
+
 - (NSString *)getRealHardwareModel {
     struct utsname systemInfo;
     uname(&systemInfo);
@@ -74,6 +135,7 @@
     self.assetsToDelete = [NSMutableArray array];
     
     self.selectButton.enabled = NO;
+    self.countryButton.enabled = NO; // 洗白时锁定国家切换
     [self.spinner startAnimating];
     [self processNextVideoInQueue];
 }
@@ -85,7 +147,7 @@
     }
     
     dispatch_async(dispatch_get_main_queue(), ^{
-        self.statusLabel.text = [NSString stringWithFormat:@"正在克隆第 %ld / %ld 个视频...\n(注入真实硬件级指纹，请勿退出)", (long)(self.currentIndex + 1), (long)self.pendingResults.count];
+        self.statusLabel.text = [NSString stringWithFormat:@"正在克隆第 %ld / %ld 个视频...\n(注入真实硬件指纹与目标国定位)", (long)(self.currentIndex + 1), (long)self.pendingResults.count];
     });
     
     PHPickerResult *result = self.pendingResults[self.currentIndex];
@@ -125,52 +187,44 @@
         exportSession.outputURL = outputURL;
         exportSession.outputFileType = AVFileTypeQuickTimeMovie; 
         
-        // ==========================================
-        // 🔥 V7 终极克隆：100% 真实设备原生数据结构
-        // ==========================================
         NSMutableArray *clonedMetadata = [NSMutableArray array];
         
-        // 1. 制造商 (Apple)
         AVMutableMetadataItem *makeItem = [[AVMutableMetadataItem alloc] init];
         makeItem.keySpace = AVMetadataKeySpaceCommon;
         makeItem.key = AVMetadataCommonKeyMake;
         makeItem.value = @"Apple";
         [clonedMetadata addObject:makeItem];
         
-        // 2. 真实物理主板型号 (例如：iPhone15,3)
         AVMutableMetadataItem *modelItem = [[AVMutableMetadataItem alloc] init];
         modelItem.keySpace = AVMetadataKeySpaceCommon;
         modelItem.key = AVMetadataCommonKeyModel;
         modelItem.value = [self getRealHardwareModel];
         [clonedMetadata addObject:modelItem];
         
-        // 3. 真实系统软件版本 (例如：17.4.1)
         AVMutableMetadataItem *softwareItem = [[AVMutableMetadataItem alloc] init];
         softwareItem.keySpace = AVMetadataKeySpaceCommon;
         softwareItem.key = AVMetadataCommonKeySoftware;
         softwareItem.value = [[UIDevice currentDevice] systemVersion];
         [clonedMetadata addObject:softwareItem];
         
-        // 4. 精确到微秒的真实生成时间
         AVMutableMetadataItem *dateItem = [[AVMutableMetadataItem alloc] init];
         dateItem.keySpace = AVMetadataKeySpaceCommon;
         dateItem.key = AVMetadataCommonKeyCreationDate;
         dateItem.value = [NSDate date];
         [clonedMetadata addObject:dateItem];
         
-        // 5. 真实 GPS 定位注入 (采用苹果严格的 ISO-6709 标准)
-        // ⚠️ 极度重要警告：这里我为你预设了【德国法兰克福】的真实经纬度坐标。
-        // 因为你在做欧洲 TikTok，如果注入你真实的中国物理 GPS，账号会瞬间死掉！
-        // 这里的坐标为法兰克福：北纬 50.1109，东经 8.6821
+        // 🔥 核心读取：动态提取用户刚才选择并记忆的目标国家 GPS 坐标
+        NSInteger savedIndex = [[NSUserDefaults standardUserDefaults] integerForKey:@"TKTargetCountryIndex"];
+        if (savedIndex >= self.countryData.count) savedIndex = 0;
+        NSString *targetGPS = self.countryData[savedIndex][@"gps"];
+        
         AVMutableMetadataItem *locationItem = [[AVMutableMetadataItem alloc] init];
         locationItem.keySpace = AVMetadataKeySpaceCommon;
         locationItem.key = AVMetadataCommonKeyLocation;
-        locationItem.value = @"+50.1109+008.6821/"; 
+        locationItem.value = targetGPS; // 动态注入！
         [clonedMetadata addObject:locationItem];
         
-        // 将克隆数据写入视频内脏
         exportSession.metadata = clonedMetadata;
-        // ==========================================
         
         [exportSession exportAsynchronouslyWithCompletionHandler:^{
             [[NSFileManager defaultManager] removeItemAtURL:safeURL error:nil];
@@ -209,7 +263,7 @@
             [[PHPhotoLibrary sharedPhotoLibrary] performChanges:^{
                 [PHAssetChangeRequest deleteAssets:self.assetsToDelete];
             } completionHandler:^(BOOL deleteSuccess, NSError * _Nullable deleteError) {
-                [self finalizeUIAndCleanupWithStatus:deleteSuccess ? @"✅ 100% 真机克隆完美收工！\n新片已入库，所有原片已彻底销毁。" : @"⚠️ 新片已批量保存！\n但您刚才拒绝了销毁，请手动删除旧原片防止泄漏！"];
+                [self finalizeUIAndCleanupWithStatus:deleteSuccess ? @"✅ 多国矩阵投送克隆完美收工！\n新片已入库，所有原片已彻底销毁。" : @"⚠️ 新片已批量保存！\n但您刚才拒绝了销毁，请手动删除旧原片防止泄漏！"];
             }];
         } else {
             [self finalizeUIAndCleanupWithStatus:@"❌ 写入相册失败，未造成原文件丢失。请检查相册权限。"];
@@ -221,6 +275,7 @@
     dispatch_async(dispatch_get_main_queue(), ^{
         [self.spinner stopAnimating];
         self.selectButton.enabled = YES;
+        self.countryButton.enabled = YES; // 恢复按钮交互
         self.statusLabel.text = statusText;
         for (NSURL *url in self.successfullyCleanedURLs) {
             [[NSFileManager defaultManager] removeItemAtURL:url error:nil];
