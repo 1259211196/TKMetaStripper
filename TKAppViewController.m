@@ -7,14 +7,12 @@
 @interface TKAppViewController : UIViewController <PHPickerViewControllerDelegate>
 
 @property (nonatomic, strong) UIButton *selectButton;
-@property (nonatomic, strong) UIButton *countryButton; // 新增：国家选择按钮
+@property (nonatomic, strong) UIButton *countryButton;
 @property (nonatomic, strong) UIActivityIndicatorView *spinner;
 @property (nonatomic, strong) UILabel *statusLabel;
 
-// 跨国坐标数据库
 @property (nonatomic, strong) NSArray *countryData;
 
-// 批量队列参数
 @property (nonatomic, strong) NSArray<PHPickerResult *> *pendingResults;
 @property (nonatomic, assign) NSInteger currentIndex;
 @property (nonatomic, strong) NSMutableArray<NSURL *> *successfullyCleanedURLs;
@@ -28,7 +26,6 @@
     [super viewDidLoad];
     self.view.backgroundColor = [UIColor systemBackgroundColor];
     
-    // 1. 初始化全球坐标矩阵数据库 (ISO-6709 标准)
     self.countryData = @[
         @{@"name": @"🇩🇪 德国 (法兰克福)", @"gps": @"+50.1109+008.6821/"},
         @{@"name": @"🇫🇷 法国 (巴黎)",     @"gps": @"+48.8566+002.3522/"},
@@ -38,9 +35,8 @@
         @{@"name": @"🇺🇸 美国 (洛杉矶)",   @"gps": @"+34.0522-118.2437/"}
     ];
     
-    // 2. 读取持久化记忆 (如果第一次打开，默认是 0 即德国)
     NSInteger savedIndex = [[NSUserDefaults standardUserDefaults] integerForKey:@"TKTargetCountryIndex"];
-    if (savedIndex >= self.countryData.count) savedIndex = 0; // 防越界保护
+    if (savedIndex >= self.countryData.count) savedIndex = 0; 
     
     self.statusLabel = [[UILabel alloc] initWithFrame:CGRectMake(20, 80, self.view.bounds.size.width - 40, 120)];
     self.statusLabel.numberOfLines = 0;
@@ -48,7 +44,6 @@
     self.statusLabel.text = @"V8 跨国中控矩阵就绪\n(支持持久化目标国记忆)\n请确保下方国家与您的节点IP一致";
     [self.view addSubview:self.statusLabel];
     
-    // 3. 渲染国家选择按钮
     self.countryButton = [UIButton buttonWithType:UIButtonTypeSystem];
     self.countryButton.frame = CGRectMake(50, 220, self.view.bounds.size.width - 100, 45);
     [self.countryButton setTitle:[NSString stringWithFormat:@"🎯 当前目标区: %@", self.countryData[savedIndex][@"name"]] forState:UIControlStateNormal];
@@ -59,7 +54,6 @@
     [self.countryButton addTarget:self action:@selector(showCountryPicker) forControlEvents:UIControlEventTouchUpInside];
     [self.view addSubview:self.countryButton];
     
-    // 4. 渲染核心洗白按钮
     self.selectButton = [UIButton buttonWithType:UIButtonTypeSystem];
     self.selectButton.frame = CGRectMake(50, 285, self.view.bounds.size.width - 100, 55);
     [self.selectButton setTitle:@"开始 100% 真机克隆洗白" forState:UIControlStateNormal];
@@ -78,7 +72,6 @@
     [PHPhotoLibrary requestAuthorization:^(PHAuthorizationStatus status) {}];
 }
 
-// 唤起底部国家选择面板
 - (void)showCountryPicker {
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"🌍 切换矩阵目标国家"
                                                                    message:@"新生成的视频将烙印该国家的绝对物理GPS坐标"
@@ -87,11 +80,9 @@
     for (int i = 0; i < self.countryData.count; i++) {
         UIAlertAction *action = [UIAlertAction actionWithTitle:self.countryData[i][@"name"] style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
             
-            // 🔥 核心记忆写入：保存用户选择到系统底层沙盒
             [[NSUserDefaults standardUserDefaults] setInteger:i forKey:@"TKTargetCountryIndex"];
             [[NSUserDefaults standardUserDefaults] synchronize];
             
-            // 更新 UI 显示
             [self.countryButton setTitle:[NSString stringWithFormat:@"🎯 当前目标区: %@", self.countryData[i][@"name"]] forState:UIControlStateNormal];
         }];
         [alert addAction:action];
@@ -100,8 +91,8 @@
     UIAlertAction *cancel = [UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil];
     [alert addAction:cancel];
     
-    // 兼容 iPad 防崩溃
-    if (UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPad) {
+    // 🔥 修复点：使用现代 iOS API 获取设备类型
+    if ([[UIDevice currentDevice] userInterfaceIdiom] == UIUserInterfaceIdiomPad) {
         alert.popoverPresentationController.sourceView = self.countryButton;
         alert.popoverPresentationController.sourceRect = self.countryButton.bounds;
     }
@@ -135,7 +126,7 @@
     self.assetsToDelete = [NSMutableArray array];
     
     self.selectButton.enabled = NO;
-    self.countryButton.enabled = NO; // 洗白时锁定国家切换
+    self.countryButton.enabled = NO; 
     [self.spinner startAnimating];
     [self processNextVideoInQueue];
 }
@@ -213,7 +204,6 @@
         dateItem.value = [NSDate date];
         [clonedMetadata addObject:dateItem];
         
-        // 🔥 核心读取：动态提取用户刚才选择并记忆的目标国家 GPS 坐标
         NSInteger savedIndex = [[NSUserDefaults standardUserDefaults] integerForKey:@"TKTargetCountryIndex"];
         if (savedIndex >= self.countryData.count) savedIndex = 0;
         NSString *targetGPS = self.countryData[savedIndex][@"gps"];
@@ -221,7 +211,7 @@
         AVMutableMetadataItem *locationItem = [[AVMutableMetadataItem alloc] init];
         locationItem.keySpace = AVMetadataKeySpaceCommon;
         locationItem.key = AVMetadataCommonKeyLocation;
-        locationItem.value = targetGPS; // 动态注入！
+        locationItem.value = targetGPS; 
         [clonedMetadata addObject:locationItem];
         
         exportSession.metadata = clonedMetadata;
@@ -275,7 +265,7 @@
     dispatch_async(dispatch_get_main_queue(), ^{
         [self.spinner stopAnimating];
         self.selectButton.enabled = YES;
-        self.countryButton.enabled = YES; // 恢复按钮交互
+        self.countryButton.enabled = YES; 
         self.statusLabel.text = statusText;
         for (NSURL *url in self.successfullyCleanedURLs) {
             [[NSFileManager defaultManager] removeItemAtURL:url error:nil];
