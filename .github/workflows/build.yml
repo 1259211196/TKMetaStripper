@@ -28,7 +28,7 @@ jobs:
         rm -rf $THEOS/sdks
         git clone https://github.com/theos/sdks.git $THEOS/sdks
 
-    - name: 5. 编译、清洗权限并打包
+    - name: 5. 编译、终极权限清洗并打包
       run: |
         make clean
         make FINALPACKAGE=1
@@ -36,11 +36,21 @@ jobs:
         cp -r .theos/obj/**/TKVideoCleaner.app Payload/
         cp Info.plist Payload/TKVideoCleaner.app/
         
-        # 🔥 核心修复：权限大清洗，解决巨魔 175 报错
-        # 1. 强行剥夺所有文件的可执行权限
-        find Payload/TKVideoCleaner.app -type f -exec chmod -x {} +
-        # 2. 唯独给真正的二进制核心文件赋予可执行权限
-        chmod +x Payload/TKVideoCleaner.app/TKVideoCleaner
+        # 🔥 终极白名单权限隔离机制
+        # A. 删除 Theos 可能残留的废弃签名文件夹
+        rm -rf Payload/TKVideoCleaner.app/_CodeSignature
+        
+        # B. 目录赋予 755 穿透权限，保证巨魔能读取
+        find Payload/TKVideoCleaner.app -type d -exec chmod 755 {} +
+        
+        # C. 核心杀招：所有普通文件（包括 plist）强制设为 644 (剥夺所有执行权限)
+        find Payload/TKVideoCleaner.app -type f -exec chmod 644 {} +
+        
+        # D. 唯独给真正的二进制核心程序赋予 755 运行权限
+        chmod 755 Payload/TKVideoCleaner.app/TKVideoCleaner
+        
+        # E. 使用云端 ldid 进行一次预签名，重塑完美的 Mach-O 头部结构给巨魔看
+        ldid -S Payload/TKVideoCleaner.app/TKVideoCleaner
         
         zip -r TKVideoCleaner.ipa Payload
 
