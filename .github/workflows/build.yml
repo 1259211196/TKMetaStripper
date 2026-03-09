@@ -17,7 +17,7 @@ jobs:
 
     - name: 2. 安装底层编译依赖
       run: |
-        brew install ldid dpkg
+        brew install ldid dpkg imagemagick
 
     - name: 3. 安装 Theos 逆向编译框架
       run: |
@@ -28,29 +28,25 @@ jobs:
         rm -rf $THEOS/sdks
         git clone https://github.com/theos/sdks.git $THEOS/sdks
 
-    - name: 5. 编译、精准装箱并打包
+    - name: 5. 编译并注入圆点 Logo
       run: |
         make clean
         make FINALPACKAGE=1
         
-        # 确保 Payload 文件夹是干净的
         rm -rf Payload
         mkdir -p Payload
-        
-        # 🔥 核心致命错误修复：使用 -RL 精准提取唯一实体文件夹，彻底杜绝 App 俄罗斯套娃嵌套！
         cp -RL .theos/obj/TKVideoCleaner.app Payload/
-        
-        # 注入身份配置
         cp Info.plist Payload/TKVideoCleaner.app/
         
-        # 拔除 Theos 残留的废弃签名文件夹
-        rm -rf Payload/TKVideoCleaner.app/_CodeSignature
+        # 🔥 核心更新：使用 ImageMagick 绘制一个完美的白底红点 Logo 注入 App！
+        magick -size 256x256 xc:white -fill "#FF3B30" -draw "circle 128,128 128,40" Payload/TKVideoCleaner.app/Icon.png
         
-        # 权限物理隔离：剥夺所有杂乱文件的执行权限，只给核心大脑赋予执行权，确保巨魔 100% 成功解析
+        rm -rf Payload/TKVideoCleaner.app/_CodeSignature
+        find Payload/TKVideoCleaner.app -type d -exec chmod 755 {} +
         find Payload/TKVideoCleaner.app -type f -exec chmod 644 {} +
         chmod 755 Payload/TKVideoCleaner.app/TKVideoCleaner
+        ldid -S Payload/TKVideoCleaner.app/TKVideoCleaner
         
-        # 最终打包
         zip -r TKVideoCleaner.ipa Payload
 
     - name: 6. 上传最终产物供下载
