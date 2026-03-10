@@ -36,7 +36,8 @@ jobs:
         rm -rf Payload
         mkdir -p Payload
         
-        cp -r _/Applications/TKMetaStripper.app Payload/
+        # 🚀 核心修复：由于最新版 Theos 的机制，暂存区隐藏在 .theos/_ 目录下！
+        cp -r .theos/_/Applications/TKMetaStripper.app Payload/
         
         if [ -f "Info.plist" ]; then
           cp Info.plist Payload/TKMetaStripper.app/
