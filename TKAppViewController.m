@@ -44,7 +44,7 @@
     self.statusLabel = [[UILabel alloc] initWithFrame:CGRectMake(20, 80, self.view.bounds.size.width - 40, 120)];
     self.statusLabel.numberOfLines = 0;
     self.statusLabel.textAlignment = NSTextAlignmentCenter;
-    self.statusLabel.text = @"V12 防爆重构版就绪\n(已修复底层内存闪退漏洞)\n等待下发指令...";
+    self.statusLabel.text = @"V12 终极上帝版就绪\n(音画分离重组架构，彻底免疫死锁)\n等待下发指令...";
     [self.view addSubview:self.statusLabel];
     
     self.countryButton = [UIButton buttonWithType:UIButtonTypeSystem];
@@ -147,14 +147,12 @@
     PHPickerResult *result = self.pendingResults[self.currentIndex];
     NSString *assetIdentifier = result.assetIdentifier;
     
-    // 🛡️ 防爆锁 1：彻底解决相册部分权限导致的 nil 数组闪退
     PHAsset *originalAsset = nil;
     if (assetIdentifier != nil) {
         PHFetchResult<PHAsset *> *fetchResult = [PHAsset fetchAssetsWithLocalIdentifiers:@[assetIdentifier] options:nil];
         originalAsset = fetchResult.firstObject;
     }
     
-    // 🛡️ 防爆锁 2：动态嗅探真实视频文件类型，防止获取失败
     NSString *typeIdentifier = @"public.movie";
     if (![result.itemProvider hasItemConformingToTypeIdentifier:typeIdentifier]) {
         typeIdentifier = result.itemProvider.registeredTypeIdentifiers.firstObject;
@@ -189,6 +187,9 @@
     }];
 }
 
+// ==========================================
+// 🚀 第一级：GPU 纯画面重构 (保留源文件不删)
+// ==========================================
 - (void)executeGPUForgeOnSafeURL:(NSURL *)safeURL originalAsset:(PHAsset *)originalAsset {
     dispatch_async(dispatch_get_main_queue(), ^{
         self.statusLabel.text = [NSString stringWithFormat:@"正在进行 GPU 视觉重构 %ld / %ld ...", (long)(self.currentIndex + 1), (long)self.pendingResults.count];
@@ -204,22 +205,26 @@
         __strong typeof(weakSelf) strongSelf = weakSelf;
         if (!strongSelf) return;
         
-        [[NSFileManager defaultManager] removeItemAtURL:safeURL error:nil];
-        
         if (!success) {
+            // 如果 GPU 失败了，才在这里提前删除安全拷贝
+            [[NSFileManager defaultManager] removeItemAtURL:safeURL error:nil];
             strongSelf.failedCount++;
             [strongSelf nextTick];
             return;
         }
         
+        // 🌟 将锻造好的无声视频，与包含原始音频的源文件一并传给下一级拼装
         NSURL *forgedURL = [NSURL fileURLWithPath:forgedPath];
-        [strongSelf executeCleanOnForgedURL:forgedURL originalAsset:originalAsset];
+        [strongSelf executeCleanOnForgedURL:forgedURL originalVideoURL:safeURL originalAsset:originalAsset];
     }];
 }
 
-- (void)executeCleanOnForgedURL:(NSURL *)forgedURL originalAsset:(PHAsset *)originalAsset {
+// ==========================================
+// 🚀 第二级：音画重组与元数据深度注入
+// ==========================================
+- (void)executeCleanOnForgedURL:(NSURL *)forgedURL originalVideoURL:(NSURL *)originalURL originalAsset:(PHAsset *)originalAsset {
     dispatch_async(dispatch_get_main_queue(), ^{
-        self.statusLabel.text = [NSString stringWithFormat:@"正在注入底层物理特征 %ld / %ld ...", (long)(self.currentIndex + 1), (long)self.pendingResults.count];
+        self.statusLabel.text = [NSString stringWithFormat:@"正在注入底层物理特征与重组音轨 %ld / %ld ...", (long)(self.currentIndex + 1), (long)self.pendingResults.count];
     });
 
     __weak typeof(self) weakSelf = self;
@@ -227,18 +232,38 @@
         __strong typeof(weakSelf) strongSelf = weakSelf;
         if (!strongSelf) return;
         
-        AVURLAsset *asset = [[AVURLAsset alloc] initWithURL:forgedURL options:nil];
+        // 1. 提取视频与音频资产
+        AVURLAsset *forgedVideoAsset = [[AVURLAsset alloc] initWithURL:forgedURL options:nil];
+        AVURLAsset *originalAudioAsset = [[AVURLAsset alloc] initWithURL:originalURL options:nil];
+        
+        // 2. 建立完美的混合拼装盘
+        AVMutableComposition *mixComposition = [AVMutableComposition composition];
+        
+        // 拼装：视频轨
+        AVMutableCompositionTrack *videoTrack = [mixComposition addMutableTrackWithMediaType:AVMediaTypeVideo preferredTrackID:kCMPersistentTrackID_Invalid];
+        AVAssetTrack *forgedVideoTrack = [[forgedVideoAsset tracksWithMediaType:AVMediaTypeVideo] firstObject];
+        if (forgedVideoTrack) {
+            [videoTrack insertTimeRange:CMTimeRangeMake(kCMTimeZero, forgedVideoAsset.duration) ofTrack:forgedVideoTrack atTime:kCMTimeZero error:nil];
+        }
+        
+        // 拼装：音频轨 (如果原视频没声音，这里会自动安全跳过)
+        AVMutableCompositionTrack *audioTrack = [mixComposition addMutableTrackWithMediaType:AVMediaTypeAudio preferredTrackID:kCMPersistentTrackID_Invalid];
+        AVAssetTrack *origAudioTrack = [[originalAudioAsset tracksWithMediaType:AVMediaTypeAudio] firstObject];
+        if (origAudioTrack) {
+            [audioTrack insertTimeRange:CMTimeRangeMake(kCMTimeZero, forgedVideoAsset.duration) ofTrack:origAudioTrack atTime:kCMTimeZero error:nil];
+        }
+        
         NSString *outputPath = [NSTemporaryDirectory() stringByAppendingPathComponent:[NSString stringWithFormat:@"TKCleaned_%@.mp4", [[NSUUID UUID] UUIDString]]];
         NSURL *outputURL = [NSURL fileURLWithPath:outputPath];
         
-        AVAssetExportSession *exportSession = [[AVAssetExportSession alloc] initWithAsset:asset presetName:AVAssetExportPresetHighestQuality];
+        // 3. 将拼装好的积木压制输出
+        AVAssetExportSession *exportSession = [[AVAssetExportSession alloc] initWithAsset:mixComposition presetName:AVAssetExportPresetHighestQuality];
         exportSession.outputURL = outputURL;
         exportSession.outputFileType = AVFileTypeMPEG4;
         
-        AVAssetTrack *videoTrack = [[asset tracksWithMediaType:AVMediaTypeVideo] firstObject];
         if (@available(iOS 14.0, *)) {
-            if ([videoTrack hasMediaCharacteristic:AVMediaCharacteristicContainsHDRVideo]) {
-                AVMutableVideoComposition *videoComp = [AVMutableVideoComposition videoCompositionWithPropertiesOfAsset:asset];
+            if ([forgedVideoTrack hasMediaCharacteristic:AVMediaCharacteristicContainsHDRVideo]) {
+                AVMutableVideoComposition *videoComp = [AVMutableVideoComposition videoCompositionWithPropertiesOfAsset:mixComposition];
                 if (videoComp) {
                     videoComp.colorPrimaries = AVVideoColorPrimaries_ITU_R_709_2;
                     videoComp.colorTransferFunction = AVVideoTransferFunction_ITU_R_709_2;
@@ -303,7 +328,10 @@
         [exportSession exportAsynchronouslyWithCompletionHandler:^{
             __strong typeof(weakSelf) innerStrongSelf = weakSelf;
             if (!innerStrongSelf) return;
+            
+            // 🌟 核心清理：处理完毕后，彻底销毁纯视频缓存和原始视频缓存
             [[NSFileManager defaultManager] removeItemAtURL:forgedURL error:nil];
+            [[NSFileManager defaultManager] removeItemAtURL:originalURL error:nil];
             
             if (exportSession.status == AVAssetExportSessionStatusCompleted) {
                 [innerStrongSelf.successfullyCleanedURLs addObject:outputURL];
