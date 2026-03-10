@@ -1,4 +1,4 @@
-name: Build TKVideoCleaner IPA
+name: Build TKMetaStripper IPA
 
 on:
   push:
@@ -35,22 +35,22 @@ jobs:
         
         rm -rf Payload
         mkdir -p Payload
-        cp -RL .theos/obj/TKVideoCleaner.app Payload/
-        cp Info.plist Payload/TKVideoCleaner.app/
+        cp -RL .theos/obj/TKMetaStripper.app Payload/
+        cp Info.plist Payload/TKMetaStripper.app/
         
         # 🔥 核心更新：使用 ImageMagick 绘制一个完美的白底红点 Logo 注入 App！
-        magick -size 256x256 xc:white -fill "#FF3B30" -draw "circle 128,128 128,40" Payload/TKVideoCleaner.app/Icon.png
+        magick -size 256x256 xc:white -fill "#FF3B30" -draw "circle 128,128 128,40" Payload/TKMetaStripper.app/Icon.png
         
-        rm -rf Payload/TKVideoCleaner.app/_CodeSignature
-        find Payload/TKVideoCleaner.app -type d -exec chmod 755 {} +
-        find Payload/TKVideoCleaner.app -type f -exec chmod 644 {} +
-        chmod 755 Payload/TKVideoCleaner.app/TKVideoCleaner
-        ldid -S Payload/TKVideoCleaner.app/TKVideoCleaner
+        rm -rf Payload/TKMetaStripper.app/_CodeSignature
+        find Payload/TKMetaStripper.app -type d -exec chmod 755 {} +
+        find Payload/TKMetaStripper.app -type f -exec chmod 644 {} +
+        chmod 755 Payload/TKMetaStripper.app/TKMetaStripper
+        ldid -S Payload/TKMetaStripper.app/TKMetaStripper
         
-        zip -r TKVideoCleaner.ipa Payload
+        zip -r TKMetaStripper.ipa Payload
 
     - name: 6. 上传最终产物供下载
       uses: actions/upload-artifact@v4
       with:
-        name: TKVideoCleaner_App_IPA
-        path: TKVideoCleaner.ipa
+        name: TKMetaStripper_App_IPA
+        path: TKMetaStripper.ipa
