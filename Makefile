@@ -18,7 +18,7 @@ TKMetaStripper_FILES = main.m TKAppViewController.m \
 TKMetaStripper_FRAMEWORKS = UIKit AVFoundation Photos MobileCoreServices PhotosUI CoreVideo Metal Foundation
 
 # 5. Swift 5.0 支持
-TKMetaStripper_SWIFT_VERSION = 5.0
+TKMetaStripper_SWIFT_VERSION = 5
 TKMetaStripper_CFLAGS = -fobjc-arc
 
 # 核心打包逻辑
