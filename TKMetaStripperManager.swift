@@ -1,8 +1,9 @@
 import Foundation
 import UIKit
-import struct utsname
+import Darwin  // 👈 重点：直接引入底层 Darwin 库即可
 
 @objc public class TKMetaStripperManager: NSObject {
+// ... 保持下方代码不变
     
     // 引用深层文件夹里的渲染引擎
     private let visualForge = VisualForgeEngine()
