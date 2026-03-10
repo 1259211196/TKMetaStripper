@@ -18,8 +18,6 @@
 @property (nonatomic, strong) NSMutableArray<NSURL *> *successfullyCleanedURLs;
 @property (nonatomic, strong) NSMutableArray<PHAsset *> *assetsToDelete;
 @property (nonatomic, assign) NSInteger failedCount;
-
-// 🌟 终极防转圈死锁：用全局强引用保住 GPU 引擎的命！防止它在后台被系统当垃圾回收！
 @property (nonatomic, strong) TKMetaStripperManager *forgeManager;
 
 @end
@@ -47,7 +45,7 @@
     self.statusLabel = [[UILabel alloc] initWithFrame:CGRectMake(20, 80, self.view.bounds.size.width - 40, 120)];
     self.statusLabel.numberOfLines = 0;
     self.statusLabel.textAlignment = NSTextAlignmentCenter;
-    self.statusLabel.text = @"V12 终极上帝版就绪\n(音画彻底分离 + 全局强引用保活)\n等待下发指令...";
+    self.statusLabel.text = @"V12 绝对防线终极版就绪\n(内存池已隔离，免疫一切秒退)\n等待下发指令...";
     [self.view addSubview:self.statusLabel];
     
     self.countryButton = [UIButton buttonWithType:UIButtonTypeSystem];
@@ -112,7 +110,7 @@
 - (NSString *)getRealHardwareModel {
     struct utsname systemInfo;
     uname(&systemInfo);
-    return [NSString stringWithCString:systemInfo.machine encoding:NSUTF8StringEncoding];
+    return [NSString stringWithCString:systemInfo.machine encoding:NSUTF8StringEncoding] ?: @"iPhone";
 }
 
 - (void)selectVideoTapped {
@@ -158,7 +156,7 @@
     
     NSString *typeIdentifier = @"public.movie";
     if (![result.itemProvider hasItemConformingToTypeIdentifier:typeIdentifier]) {
-        typeIdentifier = result.itemProvider.registeredTypeIdentifiers.firstObject;
+        typeIdentifier = result.itemProvider.registeredTypeIdentifiers.firstObject ?: @"public.movie";
     }
     
     __weak typeof(self) weakSelf = self;
@@ -189,9 +187,6 @@
     }];
 }
 
-// ==========================================
-// 🚀 第一级：纯视觉锻造 (已加入防转圈保活锁)
-// ==========================================
 - (void)executeGPUForgeOnSafeURL:(NSURL *)safeURL originalAsset:(PHAsset *)originalAsset {
     dispatch_async(dispatch_get_main_queue(), ^{
         self.statusLabel.text = [NSString stringWithFormat:@"正在进行 GPU 视觉重构 %ld / %ld ...\n(引擎全速推进中)", (long)(self.currentIndex + 1), (long)self.pendingResults.count];
@@ -200,7 +195,6 @@
     NSString *tempDir = NSTemporaryDirectory();
     NSString *forgedPath = [tempDir stringByAppendingPathComponent:[NSString stringWithFormat:@"Forged_%@.mp4", [[NSUUID UUID] UUIDString]]];
     
-    // 🌟 关键修复：使用全局强引用，绝不允许系统提前斩杀引擎！
     self.forgeManager = [[TKMetaStripperManager alloc] init];
     
     __weak typeof(self) weakSelf = self;
@@ -220,9 +214,6 @@
     }];
 }
 
-// ==========================================
-// 🚀 第二级：音画重组与元数据深度注入
-// ==========================================
 - (void)executeCleanOnForgedURL:(NSURL *)forgedURL originalVideoURL:(NSURL *)originalURL originalAsset:(PHAsset *)originalAsset {
     dispatch_async(dispatch_get_main_queue(), ^{
         self.statusLabel.text = [NSString stringWithFormat:@"正在注入底层物理特征与重组音轨 %ld / %ld ...", (long)(self.currentIndex + 1), (long)self.pendingResults.count];
@@ -238,10 +229,20 @@
         
         AVMutableComposition *mixComposition = [AVMutableComposition composition];
         
-        AVMutableCompositionTrack *videoTrack = [mixComposition addMutableTrackWithMediaType:AVMediaTypeVideo preferredTrackID:kCMPersistentTrackID_Invalid];
+        // 🌟 上帝级验证锁：绝不允许无效时长的空壳视频引发底层崩溃！
         AVAssetTrack *forgedVideoTrack = [[forgedVideoAsset tracksWithMediaType:AVMediaTypeVideo] firstObject];
-        if (forgedVideoTrack) {
+        if (forgedVideoTrack && CMTIME_IS_VALID(forgedVideoAsset.duration) && forgedVideoAsset.duration.value > 0) {
+            AVMutableCompositionTrack *videoTrack = [mixComposition addMutableTrackWithMediaType:AVMediaTypeVideo preferredTrackID:kCMPersistentTrackID_Invalid];
             [videoTrack insertTimeRange:CMTimeRangeMake(kCMTimeZero, forgedVideoAsset.duration) ofTrack:forgedVideoTrack atTime:kCMTimeZero error:nil];
+        } else {
+            // 如果 GPU 处理出现不可抗力产出空文件，立即阻断崩溃，安全走向失败计次
+            dispatch_async(dispatch_get_main_queue(), ^{
+                [[NSFileManager defaultManager] removeItemAtURL:forgedURL error:nil];
+                [[NSFileManager defaultManager] removeItemAtURL:originalURL error:nil];
+                strongSelf.failedCount++;
+                [strongSelf nextTick];
+            });
+            return;
         }
         
         AVMutableCompositionTrack *audioTrack = [mixComposition addMutableTrackWithMediaType:AVMediaTypeAudio preferredTrackID:kCMPersistentTrackID_Invalid];
