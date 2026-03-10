@@ -1,38 +1,11 @@
-#import "TKAppViewController.h"
-// 🌟 引入 Theos 自动生成的 Swift 桥接文件 (极其关键！)
-#import "TKMetaStripper-Swift.h" 
-
-@implementation TKAppViewController
-
-- (void)viewDidLoad {
-    [super viewDidLoad];
-    // 您原有的 UI 代码...
-}
-
-// 假设这是您界面上的“洗白并伪装为法兰克福”的按钮触发方法
-- (void)didTapProcessGermanyButton {
-    NSLog(@"[UI] 用户点击了德国节点，准备下发任务...");
-    
-    // 1. 准备要处理的原视频路径 (此处为示例路径，请换成您获取的真实路径)
-    NSString *sourcePath = @"/var/mobile/Media/DCIM/100APPLE/test_watch.mp4";
-    
-    // 2. 实例化刚刚写好的 Swift 总控类
-    V12WorkflowManager *manager = [[V12WorkflowManager alloc] init];
-    
-    // 3. 执行！Theos 会自动将 Swift 函数名转换为 Objective-C 的驼峰命名法
-    [manager executeUltimateBypassWithOriginalVideoPath:sourcePath
-                                     targetLocationName:@"Frankfurt"
-                                              targetLat:50.1109
-                                              targetLon:8.6821];
-}
-
-@end
-
 #import <UIKit/UIKit.h>
 #import <AVFoundation/AVFoundation.h>
 #import <Photos/Photos.h>
 #import <PhotosUI/PhotosUI.h>
 #import <sys/utsname.h>
+
+// 🌟 引入 Theos 自动生成的 Swift 桥接文件，连接我们的 GPU 引擎
+#import "TKMetaStripper-Swift.h"
 
 @interface TKAppViewController : UIViewController <PHPickerViewControllerDelegate>
 
@@ -78,7 +51,7 @@
     self.statusLabel = [[UILabel alloc] initWithFrame:CGRectMake(20, 80, self.view.bounds.size.width - 40, 120)];
     self.statusLabel.numberOfLines = 0;
     self.statusLabel.textAlignment = NSTextAlignmentCenter;
-    self.statusLabel.text = @"V12 上帝级完备版就绪\n(最高画质锁死 / GPS随机误差 / 本地时区)\n已适配最新 iOS 底层架构";
+    self.statusLabel.text = @"V12 上帝级完备版就绪\n(双引擎级联: GPU视觉锻造 + CPU元数据重塑)\n已适配最新 iOS 底层架构";
     [self.view addSubview:self.statusLabel];
     
     self.countryButton = [UIButton buttonWithType:UIButtonTypeSystem];
@@ -115,11 +88,11 @@
         NSFileManager *fm = [NSFileManager defaultManager];
         NSArray *files = [fm contentsOfDirectoryAtPath:tempDir error:nil];
         for (NSString *file in files) {
-            if ([file hasPrefix:@"Safe_"] || [file hasPrefix:@"TKCleaned_"]) {
+            if ([file hasPrefix:@"Safe_"] || [file hasPrefix:@"TKCleaned_"] || [file hasPrefix:@"Forged_"]) {
                 [fm removeItemAtPath:[tempDir stringByAppendingPathComponent:file] error:nil];
             }
         }
-        NSLog(@"[TKVideoCleaner] 启动级磁盘清道夫已完毕。");
+        NSLog(@"[TKMetaStripper] 启动级磁盘清道夫已完毕。");
     });
 }
 
@@ -186,10 +159,6 @@
         return;
     }
     
-    dispatch_async(dispatch_get_main_queue(), ^{
-        self.statusLabel.text = [NSString stringWithFormat:@"正在进行上帝级重构 %ld / %ld ...\n(锁死最高画质，请耐心等待)", (long)(self.currentIndex + 1), (long)self.pendingResults.count];
-    });
-    
     PHPickerResult *result = self.pendingResults[self.currentIndex];
     NSString *assetIdentifier = result.assetIdentifier;
     PHFetchResult<PHAsset *> *fetchResult = [PHAsset fetchAssetsWithLocalIdentifiers:@[assetIdentifier] options:nil];
@@ -198,7 +167,7 @@
     [result.itemProvider loadFileRepresentationForTypeIdentifier:@"public.movie" completionHandler:^(NSURL * _Nullable url, NSError * _Nullable error) {
         
         if (!url || error) {
-            NSLog(@"[TKVideoCleaner] 视频源流提取失败: %@", error);
+            NSLog(@"[TKMetaStripper] 视频源流提取失败: %@", error);
             self.failedCount++;
             [self nextTick];
             return;
@@ -218,27 +187,65 @@
             return;
         }
         
-        [self executeCleanOnSafeURL:safeURL originalAsset:originalAsset];
+        // 🚀 第一级火箭：先交由 GPU 进行视觉锻造！
+        [self executeGPUForgeOnSafeURL:safeURL originalAsset:originalAsset];
     }];
 }
 
-- (void)executeCleanOnSafeURL:(NSURL *)safeURL originalAsset:(PHAsset *)originalAsset {
+// ==========================================
+// 🚀 核心级联系统：第一级 GPU 视觉重构
+// ==========================================
+- (void)executeGPUForgeOnSafeURL:(NSURL *)safeURL originalAsset:(PHAsset *)originalAsset {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        self.statusLabel.text = [NSString stringWithFormat:@"正在进行 GPU 视觉重构 %ld / %ld ...\n(打碎特征矩阵，请耐心等待)", (long)(self.currentIndex + 1), (long)self.pendingResults.count];
+    });
+
+    NSString *tempDir = NSTemporaryDirectory();
+    NSString *forgedPath = [tempDir stringByAppendingPathComponent:[NSString stringWithFormat:@"Forged_%@.mp4", [[NSUUID UUID] UUIDString]]];
+    
+    // 调用我们的 Swift Metal 引擎
+    TKMetaStripperManager *manager = [[TKMetaStripperManager alloc] init];
+    [manager forgeVideoWithInputPath:safeURL.path outputPath:forgedPath completion:^(BOOL success) {
+        
+        // 无论成功与否，原始的提取文件可以删了
+        [[NSFileManager defaultManager] removeItemAtURL:safeURL error:nil];
+        
+        if (!success) {
+            NSLog(@"[TKMetaStripper] GPU 锻造失败！");
+            self.failedCount++;
+            [self nextTick];
+            return;
+        }
+        
+        // GPU 成功处理完毕，进入第二级火箭：注入灵魂
+        NSURL *forgedURL = [NSURL fileURLWithPath:forgedPath];
+        [self executeCleanOnForgedURL:forgedURL originalAsset:originalAsset];
+    }];
+}
+
+// ==========================================
+// 🚀 核心级联系统：第二级 CPU 元数据注入
+// ==========================================
+- (void)executeCleanOnForgedURL:(NSURL *)forgedURL originalAsset:(PHAsset *)originalAsset {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        self.statusLabel.text = [NSString stringWithFormat:@"正在注入底层物理特征 %ld / %ld ...\n(伪造坐标与硬件指纹)", (long)(self.currentIndex + 1), (long)self.pendingResults.count];
+    });
+
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_HIGH, 0), ^{
-        AVURLAsset *asset = [[AVURLAsset alloc] initWithURL:safeURL options:nil];
+        AVURLAsset *asset = [[AVURLAsset alloc] initWithURL:forgedURL options:nil];
         NSString *tempDir = NSTemporaryDirectory();
-        NSString *outputPath = [tempDir stringByAppendingPathComponent:[NSString stringWithFormat:@"TKCleaned_%@.mov", [[NSUUID UUID] UUIDString]]];
+        NSString *outputPath = [tempDir stringByAppendingPathComponent:[NSString stringWithFormat:@"TKCleaned_%@.mp4", [[NSUUID UUID] UUIDString]]];
         NSURL *outputURL = [NSURL fileURLWithPath:outputPath];
         
         if ([[NSFileManager defaultManager] fileExistsAtPath:outputPath]) {
             [[NSFileManager defaultManager] removeItemAtPath:outputPath error:nil];
         }
         
-        // 🎯 优化 1：强制解除 720P 封印，动态继承源文件的极限分辨率与最高质量
         AVAssetExportSession *exportSession = [[AVAssetExportSession alloc] initWithAsset:asset presetName:AVAssetExportPresetHighestQuality];
         exportSession.outputURL = outputURL;
-        exportSession.outputFileType = AVFileTypeQuickTimeMovie;
+        exportSession.outputFileType = AVFileTypeMPEG4;
         
-        // 🎯 色彩重构系统：检测 HDR 并强制映射到 BT.709 防灰 (已应用最新 iOS 18.5 API 语法)
+        // 色彩重构系统防灰
         AVAssetTrack *videoTrack = [[asset tracksWithMediaType:AVMediaTypeVideo] firstObject];
         if (@available(iOS 14.0, *)) {
             if ([videoTrack hasMediaCharacteristic:AVMediaCharacteristicContainsHDRVideo]) {
@@ -278,7 +285,6 @@
         NSString *targetGPS = self.countryData[savedIndex][@"gps"];
         NSString *targetTZ = self.countryData[savedIndex][@"tz"];
         
-        // 🎯 优化 2：根据选择的国家，强行注入当地时区偏移量（消除零时区 Z 的脚本特征）
         NSDateFormatter *formatter = [[NSDateFormatter alloc] init];
         [formatter setDateFormat:@"yyyy-MM-dd'T'HH:mm:ssZ"];
         [formatter setTimeZone:[NSTimeZone timeZoneWithName:targetTZ]];
@@ -290,14 +296,12 @@
         dateItem.value = localTimeString;
         [clonedMetadata addObject:dateItem];
         
-        // 写入 GPS 坐标
         AVMutableMetadataItem *locationItem = [[AVMutableMetadataItem alloc] init];
         locationItem.keySpace = AVMetadataKeySpaceCommon;
         locationItem.key = AVMetadataCommonKeyLocation;
         locationItem.value = targetGPS; 
         [clonedMetadata addObject:locationItem];
         
-        // 🎯 优化 3：随机注入卫星搜星误差精度，达成 100% 硬件乱真 (使用强制字面量字典注入法)
         AVMutableMetadataItem *accuracyItem = [[AVMutableMetadataItem alloc] init];
         accuracyItem.keySpace = AVMetadataKeySpaceQuickTimeMetadata;
         accuracyItem.key = @"com.apple.quicktime.location.accuracy.horizontal"; 
@@ -308,13 +312,14 @@
         exportSession.metadata = clonedMetadata;
         
         [exportSession exportAsynchronouslyWithCompletionHandler:^{
-            [[NSFileManager defaultManager] removeItemAtURL:safeURL error:nil];
+            // 清理 GPU 生成的中间文件
+            [[NSFileManager defaultManager] removeItemAtURL:forgedURL error:nil];
             
             if (exportSession.status == AVAssetExportSessionStatusCompleted) {
                 [self.successfullyCleanedURLs addObject:outputURL];
                 if (originalAsset) [self.assetsToDelete addObject:originalAsset];
             } else {
-                NSLog(@"[TKVideoCleaner] 底层重编码失败: %@", exportSession.error.localizedDescription);
+                NSLog(@"[TKMetaStripper] 底层重编码失败: %@", exportSession.error.localizedDescription);
                 self.failedCount++; 
             }
             [self nextTick];
