@@ -73,16 +73,29 @@ public class VisualForgeEngine {
             
             let processingQueue = DispatchQueue(label: "com.tkmetasturpper.forgeQueue")
             
-            // 因为只有单轨视频，我们恢复使用苹果官方最稳定的回调机制，绝生死锁！
             videoWriterInput.requestMediaDataWhenReady(on: processingQueue) { [weak self] in
-                guard let self = self else { return }
+                guard let self = self else { return } // 有了 ObjC 的强引用，这里绝对不会再为空！
                 
                 while videoWriterInput.isReadyForMoreMediaData {
-                    if reader.status != .reading {
+                    // 🌟 抛弃一切复杂的 status 判断，直接看能不能抽出下一帧
+                    if let sampleBuffer = videoReaderOutput.copyNextSampleBuffer() {
+                        autoreleasepool {
+                            if let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) {
+                                let time = Float(CMSampleBufferGetPresentationTimeStamp(sampleBuffer).seconds)
+                                self.renderFrameOnGPU(pixelBuffer: pixelBuffer, currentTime: time)
+                            }
+                            videoWriterInput.append(sampleBuffer)
+                        }
+                    } else {
+                        // 抽空了，代表视频结束了！完美收尾！
                         videoWriterInput.markAsFinished()
-                        writer.finishWriting { DispatchQueue.main.async { completion(writer.status == .completed) } }
+                        writer.finishWriting { 
+                            DispatchQueue.main.async { completion(writer.status == .completed) } 
+                        }
                         break
                     }
+                }
+            }
                     
                     if let sampleBuffer = videoReaderOutput.copyNextSampleBuffer() {
                         autoreleasepool {
