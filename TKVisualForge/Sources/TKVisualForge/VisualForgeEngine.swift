@@ -32,7 +32,8 @@ public class VisualForgeEngine {
     
     public func processVideo(inputURL: URL, outputURL: URL, completion: @escaping (Bool) -> Void) {
         let asset = AVAsset(url: inputURL)
-        // 🚀 核心大修：彻底抛弃音频提取，只专注于视频画面的 GPU 锻造！
+        
+        // 🌟 纯净重构：丢弃音频干扰，专注 GPU 锻造！
         guard let videoTrack = asset.tracks(withMediaType: .video).first else {
             DispatchQueue.main.async { completion(false) }
             return
@@ -73,11 +74,11 @@ public class VisualForgeEngine {
             
             let processingQueue = DispatchQueue(label: "com.tkmetasturpper.forgeQueue")
             
+            // 🌟 最稳固的视频单轨读取循环
             videoWriterInput.requestMediaDataWhenReady(on: processingQueue) { [weak self] in
-                guard let self = self else { return } // 有了 ObjC 的强引用，这里绝对不会再为空！
+                guard let self = self else { return }
                 
                 while videoWriterInput.isReadyForMoreMediaData {
-                    // 🌟 抛弃一切复杂的 status 判断，直接看能不能抽出下一帧
                     if let sampleBuffer = videoReaderOutput.copyNextSampleBuffer() {
                         autoreleasepool {
                             if let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) {
@@ -87,27 +88,11 @@ public class VisualForgeEngine {
                             videoWriterInput.append(sampleBuffer)
                         }
                     } else {
-                        // 抽空了，代表视频结束了！完美收尾！
+                        // 视频读取完毕，完美收尾
                         videoWriterInput.markAsFinished()
                         writer.finishWriting { 
                             DispatchQueue.main.async { completion(writer.status == .completed) } 
                         }
-                        break
-                    }
-                }
-            }
-                    
-                    if let sampleBuffer = videoReaderOutput.copyNextSampleBuffer() {
-                        autoreleasepool {
-                            if let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) {
-                                let time = Float(CMSampleBufferGetPresentationTimeStamp(sampleBuffer).seconds)
-                                self.renderFrameOnGPU(pixelBuffer: pixelBuffer, currentTime: time)
-                            }
-                            videoWriterInput.append(sampleBuffer)
-                        }
-                    } else {
-                        videoWriterInput.markAsFinished()
-                        writer.finishWriting { DispatchQueue.main.async { completion(writer.status == .completed) } }
                         break
                     }
                 }
@@ -117,7 +102,6 @@ public class VisualForgeEngine {
         }
     }
     
-    // ... 下方的 renderFrameOnGPU 方法保持不变，完美沿用 ...
     private func renderFrameOnGPU(pixelBuffer: CVPixelBuffer, currentTime: Float) {
         guard let commandQueue = commandQueue,
               let textureCache = textureCache,
@@ -136,7 +120,9 @@ public class VisualForgeEngine {
         
         guard let yRef = yTextureRef, let uvRef = uvTextureRef,
               let yTexture = CVMetalTextureGetTexture(yRef),
-              let uvTexture = CVMetalTextureGetTexture(uvRef) else { return }
+              let uvTexture = CVMetalTextureGetTexture(uvRef) else { 
+            return 
+        }
         
         guard let commandBuffer = commandQueue.makeCommandBuffer(),
               let encoder = commandBuffer.makeComputeCommandEncoder() else { return }
