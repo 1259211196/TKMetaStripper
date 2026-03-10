@@ -8,6 +8,15 @@
 
 @interface TKAppViewController : UIViewController <PHPickerViewControllerDelegate>
 
+// ... 保留原来的代码 ...
+@property (nonatomic, strong) NSMutableArray<PHAsset *> *assetsToDelete;
+@property (nonatomic, assign) NSInteger failedCount;
+
+// 🌟 终极防爆锁：用全局强引用保住 GPU 引擎的命！防止被系统提前当垃圾回收！
+@property (nonatomic, strong) TKMetaStripperManager *forgeManager;
+
+@end
+
 @property (nonatomic, strong) UIButton *selectButton;
 @property (nonatomic, strong) UIButton *countryButton;
 @property (nonatomic, strong) UIActivityIndicatorView *spinner;
@@ -198,10 +207,10 @@
     NSString *tempDir = NSTemporaryDirectory();
     NSString *forgedPath = [tempDir stringByAppendingPathComponent:[NSString stringWithFormat:@"Forged_%@.mp4", [[NSUUID UUID] UUIDString]]];
     
-    TKMetaStripperManager *manager = [[TKMetaStripperManager alloc] init];
+    self.forgeManager = [[TKMetaStripperManager alloc] init];
     
-    __weak typeof(self) weakSelf = self;
-    [manager forgeVideoWithInputPath:safeURL.path outputPath:forgedPath completion:^(BOOL success) {
+__weak typeof(self) weakSelf = self;
+[self.forgeManager forgeVideoWithInputPath:safeURL.path outputPath:forgedPath completion:^(BOOL success) {
         __strong typeof(weakSelf) strongSelf = weakSelf;
         if (!strongSelf) return;
         
