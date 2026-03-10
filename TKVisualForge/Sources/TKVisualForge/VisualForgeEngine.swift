@@ -33,8 +33,7 @@ public class VisualForgeEngine {
     public func processVideo(inputURL: URL, outputURL: URL, completion: @escaping (Bool) -> Void) {
         let asset = AVAsset(url: inputURL)
         
-        // 🌟 纯净重构：丢弃音频干扰，专注 GPU 锻造！
-        guard let videoTrack = asset.tracks(withMediaType: .video).first else {
+        guard asset.isReadable, let videoTrack = asset.tracks(withMediaType: .video).first else {
             DispatchQueue.main.async { completion(false) }
             return
         }
@@ -68,27 +67,41 @@ public class VisualForgeEngine {
             videoWriterInput.transform = videoTrack.preferredTransform
             if writer.canAdd(videoWriterInput) { writer.add(videoWriterInput) }
             
+            // 🌟 上帝级内存锁：建立独立的可写缓冲池，彻底杜绝只读内存引发的闪退！
+            let sourceBufferAttributes: [String: Any] = [
+                kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange,
+                kCVPixelBufferMetalCompatibilityKey as String: true
+            ]
+            let adaptor = AVAssetWriterInputPixelBufferAdaptor(assetWriterInput: videoWriterInput, sourcePixelBufferAttributes: sourceBufferAttributes)
+            
             reader.startReading()
             writer.startWriting()
             writer.startSession(atSourceTime: .zero)
             
             let processingQueue = DispatchQueue(label: "com.tkmetasturpper.forgeQueue")
             
-            // 🌟 最稳固的视频单轨读取循环
             videoWriterInput.requestMediaDataWhenReady(on: processingQueue) { [weak self] in
                 guard let self = self else { return }
                 
                 while videoWriterInput.isReadyForMoreMediaData {
                     if let sampleBuffer = videoReaderOutput.copyNextSampleBuffer() {
                         autoreleasepool {
-                            if let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) {
-                                let time = Float(CMSampleBufferGetPresentationTimeStamp(sampleBuffer).seconds)
-                                self.renderFrameOnGPU(pixelBuffer: pixelBuffer, currentTime: time)
+                            let pts = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
+                            if let sourceBuffer = CMSampleBufferGetImageBuffer(sampleBuffer),
+                               let pool = adaptor.pixelBufferPool {
+                                
+                                var destBuffer: CVPixelBuffer?
+                                // 从池子里提取一块绝对安全、可写的新内存交给 GPU
+                                CVPixelBufferPoolCreatePixelBuffer(kCFAllocatorDefault, pool, &destBuffer)
+                                
+                                if let dBuffer = destBuffer {
+                                    let time = pts.isValid ? Float(pts.seconds) : 0.0
+                                    self.renderFrameOnGPU(source: sourceBuffer, dest: dBuffer, currentTime: time)
+                                    adaptor.append(dBuffer, withPresentationTime: pts)
+                                }
                             }
-                            videoWriterInput.append(sampleBuffer)
                         }
                     } else {
-                        // 视频读取完毕，完美收尾
                         videoWriterInput.markAsFinished()
                         writer.finishWriting { 
                             DispatchQueue.main.async { completion(writer.status == .completed) } 
@@ -102,36 +115,41 @@ public class VisualForgeEngine {
         }
     }
     
-    private func renderFrameOnGPU(pixelBuffer: CVPixelBuffer, currentTime: Float) {
+    private func renderFrameOnGPU(source: CVPixelBuffer, dest: CVPixelBuffer, currentTime: Float) {
         guard let commandQueue = commandQueue,
               let textureCache = textureCache,
               let pipelineState = computePipelineState else { return }
         
-        let widthY = CVPixelBufferGetWidthOfPlane(pixelBuffer, 0)
-        let heightY = CVPixelBufferGetHeightOfPlane(pixelBuffer, 0)
-        let widthUV = CVPixelBufferGetWidthOfPlane(pixelBuffer, 1)
-        let heightUV = CVPixelBufferGetHeightOfPlane(pixelBuffer, 1)
+        let widthY = CVPixelBufferGetWidthOfPlane(source, 0)
+        let heightY = CVPixelBufferGetHeightOfPlane(source, 0)
+        let widthUV = CVPixelBufferGetWidthOfPlane(source, 1)
+        let heightUV = CVPixelBufferGetHeightOfPlane(source, 1)
         
-        var yTextureRef: CVMetalTexture?
-        var uvTextureRef: CVMetalTexture?
+        var srcYRef: CVMetalTexture?
+        var srcUVRef: CVMetalTexture?
+        var dstYRef: CVMetalTexture?
+        var dstUVRef: CVMetalTexture?
         
-        CVMetalTextureCacheCreateTextureFromImage(kCFAllocatorDefault, textureCache, pixelBuffer, nil, .r8Unorm, widthY, heightY, 0, &yTextureRef)
-        CVMetalTextureCacheCreateTextureFromImage(kCFAllocatorDefault, textureCache, pixelBuffer, nil, .rg8Unorm, widthUV, heightUV, 1, &uvTextureRef)
+        CVMetalTextureCacheCreateTextureFromImage(kCFAllocatorDefault, textureCache, source, nil, .r8Unorm, widthY, heightY, 0, &srcYRef)
+        CVMetalTextureCacheCreateTextureFromImage(kCFAllocatorDefault, textureCache, source, nil, .rg8Unorm, widthUV, heightUV, 1, &srcUVRef)
         
-        guard let yRef = yTextureRef, let uvRef = uvTextureRef,
-              let yTexture = CVMetalTextureGetTexture(yRef),
-              let uvTexture = CVMetalTextureGetTexture(uvRef) else { 
-            return 
-        }
+        CVMetalTextureCacheCreateTextureFromImage(kCFAllocatorDefault, textureCache, dest, nil, .r8Unorm, widthY, heightY, 0, &dstYRef)
+        CVMetalTextureCacheCreateTextureFromImage(kCFAllocatorDefault, textureCache, dest, nil, .rg8Unorm, widthUV, heightUV, 1, &dstUVRef)
+        
+        guard let sY = srcYRef, let sUV = srcUVRef, let dY = dstYRef, let dUV = dstUVRef,
+              let texSY = CVMetalTextureGetTexture(sY),
+              let texSUV = CVMetalTextureGetTexture(sUV),
+              let texDY = CVMetalTextureGetTexture(dY),
+              let texDUV = CVMetalTextureGetTexture(dUV) else { return }
         
         guard let commandBuffer = commandQueue.makeCommandBuffer(),
               let encoder = commandBuffer.makeComputeCommandEncoder() else { return }
         
         encoder.setComputePipelineState(pipelineState)
-        encoder.setTexture(yTexture, index: 0)
-        encoder.setTexture(uvTexture, index: 1)
-        encoder.setTexture(yTexture, index: 2)
-        encoder.setTexture(uvTexture, index: 3)
+        encoder.setTexture(texSY, index: 0)
+        encoder.setTexture(texSUV, index: 1)
+        encoder.setTexture(texDY, index: 2)
+        encoder.setTexture(texDUV, index: 3)
         
         var timeValue = currentTime
         encoder.setBytes(&timeValue, length: MemoryLayout<Float>.size, index: 0)
@@ -145,6 +163,6 @@ public class VisualForgeEngine {
         encoder.endEncoding()
         
         commandBuffer.commit()
-        commandBuffer.waitUntilCompleted()
+        commandBuffer.waitUntilCompleted() // 确保 GPU 写完后才进入下一帧
     }
 }
