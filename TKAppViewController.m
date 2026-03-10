@@ -45,7 +45,7 @@
     self.statusLabel = [[UILabel alloc] initWithFrame:CGRectMake(20, 80, self.view.bounds.size.width - 40, 120)];
     self.statusLabel.numberOfLines = 0;
     self.statusLabel.textAlignment = NSTextAlignmentCenter;
-    self.statusLabel.text = @"V12 绝对防线终极版就绪\n(内存池已隔离，免疫一切秒退)\n等待下发指令...";
+    self.statusLabel.text = @"V12 最终防爆护盾启动\n(不死鸟架构已载入，无惧任何文件损伤)\n等待指令...";
     [self.view addSubview:self.statusLabel];
     
     self.countryButton = [UIButton buttonWithType:UIButtonTypeSystem];
@@ -189,11 +189,10 @@
 
 - (void)executeGPUForgeOnSafeURL:(NSURL *)safeURL originalAsset:(PHAsset *)originalAsset {
     dispatch_async(dispatch_get_main_queue(), ^{
-        self.statusLabel.text = [NSString stringWithFormat:@"正在进行 GPU 视觉重构 %ld / %ld ...\n(引擎全速推进中)", (long)(self.currentIndex + 1), (long)self.pendingResults.count];
+        self.statusLabel.text = [NSString stringWithFormat:@"正在进行 GPU 视觉重构 %ld / %ld ...", (long)(self.currentIndex + 1), (long)self.pendingResults.count];
     });
 
-    NSString *tempDir = NSTemporaryDirectory();
-    NSString *forgedPath = [tempDir stringByAppendingPathComponent:[NSString stringWithFormat:@"Forged_%@.mp4", [[NSUUID UUID] UUIDString]]];
+    NSString *forgedPath = [NSTemporaryDirectory() stringByAppendingPathComponent:[NSString stringWithFormat:@"Forged_%@.mp4", [[NSUUID UUID] UUIDString]]];
     
     self.forgeManager = [[TKMetaStripperManager alloc] init];
     
@@ -216,7 +215,7 @@
 
 - (void)executeCleanOnForgedURL:(NSURL *)forgedURL originalVideoURL:(NSURL *)originalURL originalAsset:(PHAsset *)originalAsset {
     dispatch_async(dispatch_get_main_queue(), ^{
-        self.statusLabel.text = [NSString stringWithFormat:@"正在注入底层物理特征与重组音轨 %ld / %ld ...", (long)(self.currentIndex + 1), (long)self.pendingResults.count];
+        self.statusLabel.text = [NSString stringWithFormat:@"正在注入底层特征与防爆锁 %ld / %ld ...", (long)(self.currentIndex + 1), (long)self.pendingResults.count];
     });
 
     __weak typeof(self) weakSelf = self;
@@ -229,13 +228,11 @@
         
         AVMutableComposition *mixComposition = [AVMutableComposition composition];
         
-        // 🌟 上帝级验证锁：绝不允许无效时长的空壳视频引发底层崩溃！
         AVAssetTrack *forgedVideoTrack = [[forgedVideoAsset tracksWithMediaType:AVMediaTypeVideo] firstObject];
         if (forgedVideoTrack && CMTIME_IS_VALID(forgedVideoAsset.duration) && forgedVideoAsset.duration.value > 0) {
             AVMutableCompositionTrack *videoTrack = [mixComposition addMutableTrackWithMediaType:AVMediaTypeVideo preferredTrackID:kCMPersistentTrackID_Invalid];
             [videoTrack insertTimeRange:CMTimeRangeMake(kCMTimeZero, forgedVideoAsset.duration) ofTrack:forgedVideoTrack atTime:kCMTimeZero error:nil];
         } else {
-            // 如果 GPU 处理出现不可抗力产出空文件，立即阻断崩溃，安全走向失败计次
             dispatch_async(dispatch_get_main_queue(), ^{
                 [[NSFileManager defaultManager] removeItemAtURL:forgedURL error:nil];
                 [[NSFileManager defaultManager] removeItemAtURL:originalURL error:nil];
@@ -248,7 +245,13 @@
         AVMutableCompositionTrack *audioTrack = [mixComposition addMutableTrackWithMediaType:AVMediaTypeAudio preferredTrackID:kCMPersistentTrackID_Invalid];
         AVAssetTrack *origAudioTrack = [[originalAudioAsset tracksWithMediaType:AVMediaTypeAudio] firstObject];
         if (origAudioTrack) {
-            [audioTrack insertTimeRange:CMTimeRangeMake(kCMTimeZero, forgedVideoAsset.duration) ofTrack:origAudioTrack atTime:kCMTimeZero error:nil];
+            CMTime vDuration = forgedVideoAsset.duration;
+            CMTime aDuration = originalAudioAsset.duration;
+            CMTime safeInsertDuration = (CMTimeCompare(vDuration, aDuration) == -1) ? vDuration : aDuration;
+            
+            if (CMTIME_IS_VALID(safeInsertDuration) && safeInsertDuration.value > 0) {
+                [audioTrack insertTimeRange:CMTimeRangeMake(kCMTimeZero, safeInsertDuration) ofTrack:origAudioTrack atTime:kCMTimeZero error:nil];
+            }
         }
         
         NSString *outputPath = [NSTemporaryDirectory() stringByAppendingPathComponent:[NSString stringWithFormat:@"TKCleaned_%@.mp4", [[NSUUID UUID] UUIDString]]];
