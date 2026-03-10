@@ -1,3 +1,33 @@
+#import "TKAppViewController.h"
+// 🌟 引入 Theos 自动生成的 Swift 桥接文件 (极其关键！)
+#import "TKMetaStripper-Swift.h" 
+
+@implementation TKAppViewController
+
+- (void)viewDidLoad {
+    [super viewDidLoad];
+    // 您原有的 UI 代码...
+}
+
+// 假设这是您界面上的“洗白并伪装为法兰克福”的按钮触发方法
+- (void)didTapProcessGermanyButton {
+    NSLog(@"[UI] 用户点击了德国节点，准备下发任务...");
+    
+    // 1. 准备要处理的原视频路径 (此处为示例路径，请换成您获取的真实路径)
+    NSString *sourcePath = @"/var/mobile/Media/DCIM/100APPLE/test_watch.mp4";
+    
+    // 2. 实例化刚刚写好的 Swift 总控类
+    V12WorkflowManager *manager = [[V12WorkflowManager alloc] init];
+    
+    // 3. 执行！Theos 会自动将 Swift 函数名转换为 Objective-C 的驼峰命名法
+    [manager executeUltimateBypassWithOriginalVideoPath:sourcePath
+                                     targetLocationName:@"Frankfurt"
+                                              targetLat:50.1109
+                                              targetLon:8.6821];
+}
+
+@end
+
 #import <UIKit/UIKit.h>
 #import <AVFoundation/AVFoundation.h>
 #import <Photos/Photos.h>
