@@ -4,8 +4,6 @@
 #import <PhotosUI/PhotosUI.h>
 #import <sys/utsname.h>
 
-#import "TKMetaStripper-Swift.h"
-
 @interface TKAppViewController : UIViewController <PHPickerViewControllerDelegate>
 
 @property (nonatomic, strong) UIButton *selectButton;
@@ -18,7 +16,6 @@
 @property (nonatomic, strong) NSMutableArray<NSURL *> *successfullyCleanedURLs;
 @property (nonatomic, strong) NSMutableArray<PHAsset *> *assetsToDelete;
 @property (nonatomic, assign) NSInteger failedCount;
-@property (nonatomic, strong) TKMetaStripperManager *forgeManager;
 
 @end
 
@@ -30,6 +27,7 @@
     
     [self performGarbageCollection];
     
+    // 预设欧洲核心国家与美国洛杉矶的物理坐标及真实时区
     self.countryData = @[
         @{@"name": @"🇩🇪 德国 (法兰克福)", @"gps": @"+50.1109+008.6821/", @"tz": @"Europe/Berlin"},
         @{@"name": @"🇫🇷 法国 (巴黎)",     @"gps": @"+48.8566+002.3522/", @"tz": @"Europe/Paris"},
@@ -45,7 +43,7 @@
     self.statusLabel = [[UILabel alloc] initWithFrame:CGRectMake(20, 80, self.view.bounds.size.width - 40, 120)];
     self.statusLabel.numberOfLines = 0;
     self.statusLabel.textAlignment = NSTextAlignmentCenter;
-    self.statusLabel.text = @"V12 最终防爆护盾启动\n(不死鸟架构已载入，无惧任何文件损伤)\n等待指令...";
+    self.statusLabel.text = @"V15 终极微创侠客版\n(0画质损伤/居中微漂移/声纹重组/FastStart)\n等待指令...";
     [self.view addSubview:self.statusLabel];
     
     self.countryButton = [UIButton buttonWithType:UIButtonTypeSystem];
@@ -60,7 +58,7 @@
     
     self.selectButton = [UIButton buttonWithType:UIButtonTypeSystem];
     self.selectButton.frame = CGRectMake(50, 285, self.view.bounds.size.width - 100, 55);
-    [self.selectButton setTitle:@"开始 100% 真机克隆洗白" forState:UIControlStateNormal];
+    [self.selectButton setTitle:@"开始无痕物理重塑洗白" forState:UIControlStateNormal];
     self.selectButton.backgroundColor = [UIColor systemRedColor];
     self.selectButton.titleLabel.font = [UIFont boldSystemFontOfSize:16];
     [self.selectButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
@@ -82,7 +80,7 @@
         NSFileManager *fm = [NSFileManager defaultManager];
         NSArray *files = [fm contentsOfDirectoryAtPath:tempDir error:nil];
         for (NSString *file in files) {
-            if ([file hasPrefix:@"Safe_"] || [file hasPrefix:@"TKCleaned_"] || [file hasPrefix:@"Forged_"]) {
+            if ([file hasPrefix:@"Safe_"] || [file hasPrefix:@"TKCleaned_"]) {
                 [fm removeItemAtPath:[tempDir stringByAppendingPathComponent:file] error:nil];
             }
         }
@@ -107,6 +105,7 @@
     [self presentViewController:alert animated:YES completion:nil];
 }
 
+// 获取底层真实的硬件代号 (如 iPhone14,2)
 - (NSString *)getRealHardwareModel {
     struct utsname systemInfo;
     uname(&systemInfo);
@@ -183,39 +182,16 @@
             return;
         }
         
-        [strongSelf executeGPUForgeOnSafeURL:safeURL originalAsset:originalAsset];
+        [strongSelf executeXiakeForgeOnURL:safeURL originalAsset:originalAsset];
     }];
 }
 
-- (void)executeGPUForgeOnSafeURL:(NSURL *)safeURL originalAsset:(PHAsset *)originalAsset {
+// ==========================================
+// 🚀 核心战舰：AVFoundation 级无痕微创重塑
+// ==========================================
+- (void)executeXiakeForgeOnURL:(NSURL *)originalURL originalAsset:(PHAsset *)originalAsset {
     dispatch_async(dispatch_get_main_queue(), ^{
-        self.statusLabel.text = [NSString stringWithFormat:@"正在进行 GPU 视觉重构 %ld / %ld ...", (long)(self.currentIndex + 1), (long)self.pendingResults.count];
-    });
-
-    NSString *forgedPath = [NSTemporaryDirectory() stringByAppendingPathComponent:[NSString stringWithFormat:@"Forged_%@.mp4", [[NSUUID UUID] UUIDString]]];
-    
-    self.forgeManager = [[TKMetaStripperManager alloc] init];
-    
-    __weak typeof(self) weakSelf = self;
-    [self.forgeManager forgeVideoWithInputPath:safeURL.path outputPath:forgedPath completion:^(BOOL success) {
-        __strong typeof(weakSelf) strongSelf = weakSelf;
-        if (!strongSelf) return;
-        
-        if (!success) {
-            [[NSFileManager defaultManager] removeItemAtURL:safeURL error:nil];
-            strongSelf.failedCount++;
-            [strongSelf nextTick];
-            return;
-        }
-        
-        NSURL *forgedURL = [NSURL fileURLWithPath:forgedPath];
-        [strongSelf executeCleanOnForgedURL:forgedURL originalVideoURL:safeURL originalAsset:originalAsset];
-    }];
-}
-
-- (void)executeCleanOnForgedURL:(NSURL *)forgedURL originalVideoURL:(NSURL *)originalURL originalAsset:(PHAsset *)originalAsset {
-    dispatch_async(dispatch_get_main_queue(), ^{
-        self.statusLabel.text = [NSString stringWithFormat:@"正在注入底层特征与防爆锁 %ld / %ld ...", (long)(self.currentIndex + 1), (long)self.pendingResults.count];
+        self.statusLabel.text = [NSString stringWithFormat:@"正在执行终极无痕重构 (空间/帧率/声纹) %ld / %ld ...", (long)(self.currentIndex + 1), (long)self.pendingResults.count];
     });
 
     __weak typeof(self) weakSelf = self;
@@ -223,18 +199,12 @@
         __strong typeof(weakSelf) strongSelf = weakSelf;
         if (!strongSelf) return;
         
-        AVURLAsset *forgedVideoAsset = [[AVURLAsset alloc] initWithURL:forgedURL options:nil];
-        AVURLAsset *originalAudioAsset = [[AVURLAsset alloc] initWithURL:originalURL options:nil];
-        
+        AVURLAsset *videoAsset = [[AVURLAsset alloc] initWithURL:originalURL options:nil];
         AVMutableComposition *mixComposition = [AVMutableComposition composition];
         
-        AVAssetTrack *forgedVideoTrack = [[forgedVideoAsset tracksWithMediaType:AVMediaTypeVideo] firstObject];
-        if (forgedVideoTrack && CMTIME_IS_VALID(forgedVideoAsset.duration) && forgedVideoAsset.duration.value > 0) {
-            AVMutableCompositionTrack *videoTrack = [mixComposition addMutableTrackWithMediaType:AVMediaTypeVideo preferredTrackID:kCMPersistentTrackID_Invalid];
-            [videoTrack insertTimeRange:CMTimeRangeMake(kCMTimeZero, forgedVideoAsset.duration) ofTrack:forgedVideoTrack atTime:kCMTimeZero error:nil];
-        } else {
+        AVAssetTrack *videoTrack = [[videoAsset tracksWithMediaType:AVMediaTypeVideo] firstObject];
+        if (!videoTrack || !CMTIME_IS_VALID(videoAsset.duration)) {
             dispatch_async(dispatch_get_main_queue(), ^{
-                [[NSFileManager defaultManager] removeItemAtURL:forgedURL error:nil];
                 [[NSFileManager defaultManager] removeItemAtURL:originalURL error:nil];
                 strongSelf.failedCount++;
                 [strongSelf nextTick];
@@ -242,57 +212,109 @@
             return;
         }
         
-        AVMutableCompositionTrack *audioTrack = [mixComposition addMutableTrackWithMediaType:AVMediaTypeAudio preferredTrackID:kCMPersistentTrackID_Invalid];
-        AVAssetTrack *origAudioTrack = [[originalAudioAsset tracksWithMediaType:AVMediaTypeAudio] firstObject];
-        if (origAudioTrack) {
-            CMTime vDuration = forgedVideoAsset.duration;
-            CMTime aDuration = originalAudioAsset.duration;
-            CMTime safeInsertDuration = (CMTimeCompare(vDuration, aDuration) == -1) ? vDuration : aDuration;
-            
-            if (CMTIME_IS_VALID(safeInsertDuration) && safeInsertDuration.value > 0) {
-                [audioTrack insertTimeRange:CMTimeRangeMake(kCMTimeZero, safeInsertDuration) ofTrack:origAudioTrack atTime:kCMTimeZero error:nil];
+        AVMutableCompositionTrack *compVideoTrack = [mixComposition addMutableTrackWithMediaType:AVMediaTypeVideo preferredTrackID:kCMPersistentTrackID_Invalid];
+        [compVideoTrack insertTimeRange:CMTimeRangeMake(kCMTimeZero, videoAsset.duration) ofTrack:videoTrack atTime:kCMTimeZero error:nil];
+        
+        AVAssetTrack *audioTrack = [[videoAsset tracksWithMediaType:AVMediaTypeAudio] firstObject];
+        if (audioTrack) {
+            AVMutableCompositionTrack *compAudioTrack = [mixComposition addMutableTrackWithMediaType:AVMediaTypeAudio preferredTrackID:kCMPersistentTrackID_Invalid];
+            [compAudioTrack insertTimeRange:CMTimeRangeMake(kCMTimeZero, videoAsset.duration) ofTrack:audioTrack atTime:kCMTimeZero error:nil];
+        }
+        
+        // ==========================================
+        // 🛡️ 物理破局 1 & 2：居中隐形微缩放 + 强制非标帧率
+        // ==========================================
+        AVMutableVideoComposition *videoComp = [AVMutableVideoComposition videoComposition];
+        videoComp.renderSize = videoTrack.naturalSize;
+        
+        // 强制重设帧率为 29.97 fps (NTSC)，彻底打乱原本的 GOP 关键帧与时序结构
+        videoComp.frameDuration = CMTimeMake(100, 2997); 
+        
+        AVMutableVideoCompositionInstruction *instruction = [AVMutableVideoCompositionInstruction videoCompositionInstruction];
+        instruction.timeRange = CMTimeRangeMake(kCMTimeZero, videoAsset.duration);
+        
+        AVMutableVideoCompositionLayerInstruction *layerInst = [AVMutableVideoCompositionLayerInstruction videoCompositionLayerInstructionWithAssetTrack:compVideoTrack];
+        
+        // 核心刀法：绝对居中的 1.015 倍缩放，确保四周均匀隐形裁切，绝不漏黑边，完美击碎 pHash
+        CGFloat scale = 1.015;
+        CGAffineTransform transform = videoTrack.preferredTransform;
+        CGSize naturalSize = videoTrack.naturalSize;
+        CGFloat dx = naturalSize.width * (1.0 - scale) / 2.0;
+        CGFloat dy = naturalSize.height * (1.0 - scale) / 2.0;
+        
+        CGAffineTransform scaleTransform = CGAffineTransformScale(transform, scale, scale);
+        CGAffineTransform centerTransform = CGAffineTransformTranslate(scaleTransform, dx, dy);
+        [layerInst setTransform:centerTransform atTime:kCMTimeZero];
+        
+        instruction.layerInstructions = @[layerInst];
+        videoComp.instructions = @[instruction];
+        
+        // 锁定 HDR 与色彩空间，保死画质
+        if (@available(iOS 14.0, *)) {
+            if ([videoTrack hasMediaCharacteristic:AVMediaCharacteristicContainsHDRVideo]) {
+                videoComp.colorPrimaries = AVVideoColorPrimaries_ITU_R_709_2;
+                videoComp.colorTransferFunction = AVVideoTransferFunction_ITU_R_709_2;
+                videoComp.colorYCbCrMatrix = AVVideoYCbCrMatrix_ITU_R_709_2;
             }
+        }
+        
+        // ==========================================
+        // 🛡️ 物理破局 3：音频波形重采样 (声纹洗白)
+        // ==========================================
+        AVMutableAudioMix *audioMix = nil;
+        if (audioTrack) {
+            audioMix = [AVMutableAudioMix audioMix];
+            AVMutableCompositionTrack *targetAudioTrack = [mixComposition tracksWithMediaType:AVMediaTypeAudio].firstObject;
+            AVMutableAudioMixInputParameters *mixParam = [AVMutableAudioMixInputParameters audioMixInputParametersWithTrack:targetAudioTrack];
+            // 全局音量下调 2% (0.98)，人耳完全无感，但底层的音频 MD5 和频谱彻底断裂
+            [mixParam setVolume:0.98 atTime:kCMTimeZero];
+            audioMix.inputParameters = @[mixParam];
         }
         
         NSString *outputPath = [NSTemporaryDirectory() stringByAppendingPathComponent:[NSString stringWithFormat:@"TKCleaned_%@.mp4", [[NSUUID UUID] UUIDString]]];
         NSURL *outputURL = [NSURL fileURLWithPath:outputPath];
         
+        // ==========================================
+        // 🛡️ 导出装甲：启用最高画质与流媒体前置 (Fast Start)
+        // ==========================================
         AVAssetExportSession *exportSession = [[AVAssetExportSession alloc] initWithAsset:mixComposition presetName:AVAssetExportPresetHighestQuality];
         exportSession.outputURL = outputURL;
         exportSession.outputFileType = AVFileTypeMPEG4;
-        
-        if (@available(iOS 14.0, *)) {
-            if ([forgedVideoTrack hasMediaCharacteristic:AVMediaCharacteristicContainsHDRVideo]) {
-                AVMutableVideoComposition *videoComp = [AVMutableVideoComposition videoCompositionWithPropertiesOfAsset:mixComposition];
-                if (videoComp) {
-                    videoComp.colorPrimaries = AVVideoColorPrimaries_ITU_R_709_2;
-                    videoComp.colorTransferFunction = AVVideoTransferFunction_ITU_R_709_2;
-                    videoComp.colorYCbCrMatrix = AVVideoYCbCrMatrix_ITU_R_709_2;
-                    exportSession.videoComposition = videoComp;
-                }
-            }
+        exportSession.videoComposition = videoComp;
+        if (audioMix) {
+            exportSession.audioMix = audioMix;
         }
+        // 强制把 moov 原子块移到文件头部，模拟真实社交流媒体文件的原生 DNA
+        exportSession.shouldOptimizeForNetworkUse = YES; 
         
+        // ==========================================
+        // 🛡️ 物理破局 4：无懈可击的双空间真机元数据注入
+        // ==========================================
         NSMutableArray *clonedMetadata = [NSMutableArray array];
+        NSString *realModel = [strongSelf getRealHardwareModel];
+        NSString *systemVer = [[UIDevice currentDevice] systemVersion];
         
-        AVMutableMetadataItem *makeItem = [[AVMutableMetadataItem alloc] init];
-        makeItem.keySpace = AVMetadataKeySpaceCommon;
-        makeItem.key = AVMetadataCommonKeyMake;
-        makeItem.value = @"Apple";
-        [clonedMetadata addObject:makeItem];
+        // 1. 机型注入 (Common + QT 双轨)
+        AVMutableMetadataItem *modelCommon = [[AVMutableMetadataItem alloc] init];
+        modelCommon.keySpace = AVMetadataKeySpaceCommon;
+        modelCommon.key = AVMetadataCommonKeyModel;
+        modelCommon.value = realModel;
+        [clonedMetadata addObject:modelCommon];
         
-        AVMutableMetadataItem *modelItem = [[AVMutableMetadataItem alloc] init];
-        modelItem.keySpace = AVMetadataKeySpaceCommon;
-        modelItem.key = AVMetadataCommonKeyModel;
-        modelItem.value = [strongSelf getRealHardwareModel]; 
-        [clonedMetadata addObject:modelItem];
-        
-        AVMutableMetadataItem *softwareItem = [[AVMutableMetadataItem alloc] init];
-        softwareItem.keySpace = AVMetadataKeySpaceCommon;
-        softwareItem.key = AVMetadataCommonKeySoftware;
-        softwareItem.value = [[UIDevice currentDevice] systemVersion];
-        [clonedMetadata addObject:softwareItem];
-        
+        AVMutableMetadataItem *modelQT = [[AVMutableMetadataItem alloc] init];
+        modelQT.keySpace = AVMetadataKeySpaceQuickTimeMetadata;
+        modelQT.key = AVMetadataQuickTimeMetadataKeyModel;
+        modelQT.value = realModel;
+        [clonedMetadata addObject:modelQT];
+
+        // 2. 品牌注入
+        AVMutableMetadataItem *makeCommon = [[AVMutableMetadataItem alloc] init];
+        makeCommon.keySpace = AVMetadataKeySpaceCommon;
+        makeCommon.key = AVMetadataCommonKeyMake;
+        makeCommon.value = @"Apple";
+        [clonedMetadata addObject:makeCommon];
+
+        // 3. 动态时间与时区推演 (倒退随机时间)
         NSInteger savedIndex = [[NSUserDefaults standardUserDefaults] integerForKey:@"TKTargetCountryIndex"];
         if (savedIndex >= strongSelf.countryData.count) savedIndex = 0;
         NSString *targetGPS = strongSelf.countryData[savedIndex][@"gps"];
@@ -305,42 +327,70 @@
         [formatter setTimeZone:[NSTimeZone timeZoneWithName:targetTZ]];
         NSString *localTimeString = [formatter stringFromDate:randomizedPastDate];
         
-        AVMutableMetadataItem *dateItem = [[AVMutableMetadataItem alloc] init];
-        dateItem.keySpace = AVMetadataKeySpaceCommon;
-        dateItem.key = AVMetadataCommonKeyCreationDate;
-        dateItem.value = localTimeString;
-        [clonedMetadata addObject:dateItem];
+        AVMutableMetadataItem *dateCommon = [[AVMutableMetadataItem alloc] init];
+        dateCommon.keySpace = AVMetadataKeySpaceCommon;
+        dateCommon.key = AVMetadataCommonKeyCreationDate;
+        dateCommon.value = localTimeString;
+        [clonedMetadata addObject:dateCommon];
         
-        AVMutableMetadataItem *locationItem = [[AVMutableMetadataItem alloc] init];
-        locationItem.keySpace = AVMetadataKeySpaceCommon;
-        locationItem.key = AVMetadataCommonKeyLocation;
-        locationItem.value = targetGPS; 
-        [clonedMetadata addObject:locationItem];
+        AVMutableMetadataItem *dateQT = [[AVMutableMetadataItem alloc] init];
+        dateQT.keySpace = AVMetadataKeySpaceQuickTimeMetadata;
+        dateQT.key = AVMetadataQuickTimeMetadataKeyCreationDate;
+        dateQT.value = localTimeString;
+        [clonedMetadata addObject:dateQT];
+
+        // 4. GPS 定位锚点
+        AVMutableMetadataItem *locCommon = [[AVMutableMetadataItem alloc] init];
+        locCommon.keySpace = AVMetadataKeySpaceCommon;
+        locCommon.key = AVMetadataCommonKeyLocation;
+        locCommon.value = targetGPS;
+        [clonedMetadata addObject:locCommon];
         
-        AVMutableMetadataItem *accuracyItem = [[AVMutableMetadataItem alloc] init];
-        accuracyItem.keySpace = AVMetadataKeySpaceQuickTimeMetadata;
-        accuracyItem.key = @"com.apple.quicktime.location.accuracy.horizontal"; 
-        accuracyItem.value = @(15 + arc4random_uniform(51));
-        [clonedMetadata addObject:accuracyItem];
+        AVMutableMetadataItem *locQT = [[AVMutableMetadataItem alloc] init];
+        locQT.keySpace = AVMetadataKeySpaceQuickTimeMetadata;
+        locQT.key = AVMetadataQuickTimeMetadataKeyLocationISO6709;
+        locQT.value = targetGPS;
+        [clonedMetadata addObject:locQT];
+
+        // 5. 软件环境
+        AVMutableMetadataItem *swQT = [[AVMutableMetadataItem alloc] init];
+        swQT.keySpace = AVMetadataKeySpaceQuickTimeMetadata;
+        swQT.key = AVMetadataQuickTimeMetadataKeySoftware;
+        swQT.value = [NSString stringWithFormat:@"%@", systemVer];
+        [clonedMetadata addObject:swQT];
         
+        // 6. 终极伪装：补齐 iPhone 镜头与光圈的物理 Exif 参数
+        [clonedMetadata addObject:[strongSelf createExifItemWithKey:(id)kCGImagePropertyExifFNumber value:@(1.8)]];
+        [clonedMetadata addObject:[strongSelf createExifItemWithKey:(id)kCGImagePropertyExifFocalLength value:@(4.2)]];
+        [clonedMetadata addObject:[strongSelf createExifItemWithKey:(id)kCGImagePropertyExifLensModel value:[NSString stringWithFormat:@"%@ back main camera 24mm f/1.78", realModel]]];
+
         exportSession.metadata = clonedMetadata;
         
         [exportSession exportAsynchronouslyWithCompletionHandler:^{
             __strong typeof(weakSelf) innerStrongSelf = weakSelf;
             if (!innerStrongSelf) return;
             
-            [[NSFileManager defaultManager] removeItemAtURL:forgedURL error:nil];
             [[NSFileManager defaultManager] removeItemAtURL:originalURL error:nil];
             
             if (exportSession.status == AVAssetExportSessionStatusCompleted) {
                 [innerStrongSelf.successfullyCleanedURLs addObject:outputURL];
                 if (originalAsset) [innerStrongSelf.assetsToDelete addObject:originalAsset];
             } else {
+                NSLog(@"[TKMetaStripper] Export Failed: %@", exportSession.error);
                 innerStrongSelf.failedCount++; 
             }
             [innerStrongSelf nextTick];
         }];
     });
+}
+
+// 辅助方法：快速生成底层 Exif 标签
+- (AVMutableMetadataItem *)createExifItemWithKey:(NSString *)key value:(id)value {
+    AVMutableMetadataItem *item = [[AVMutableMetadataItem alloc] init];
+    item.keySpace = AVMetadataKeySpaceExif;
+    item.key = key;
+    item.value = value;
+    return item;
 }
 
 - (void)nextTick {
