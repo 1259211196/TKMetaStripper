@@ -59,7 +59,6 @@ public class VisualForgeEngine {
             let estimatedBitrate = videoTrack.estimatedDataRate > 0 ? videoTrack.estimatedDataRate : 25000000
             
             // 🌟 强效装甲：无论原视频多大多小，强制锁定 25Mbps 极高码率！
-            // 填平所有二次编码的数字疤痕，让风控 AI 误以为这是 iPhone 原生超高清直出！
             let targetBitrate = 25_000_000 
             
             let writerVideoSettings: [String: Any] = [
@@ -68,7 +67,6 @@ public class VisualForgeEngine {
                 AVVideoHeightKey: safeH,
                 AVVideoCompressionPropertiesKey: [
                     AVVideoAverageBitRateKey: targetBitrate,
-                    AVVideoProfileLevelKey: kVTProfileLevel_HEVC_Main_AutoLevel,
                     AVVideoMaxKeyFrameIntervalKey: 30 // 🌟 语义混淆：强制每30帧重排一个 I 帧，击碎时序查重！
                 ]
             ]
