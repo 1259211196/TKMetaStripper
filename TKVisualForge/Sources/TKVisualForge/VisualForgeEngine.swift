@@ -26,7 +26,6 @@ public class VisualForgeEngine {
         CVMetalTextureCacheCreate(kCFAllocatorDefault, nil, device, nil, &cache)
         self.textureCache = cache
         
-        // 🔧 修复点 1：使用 Bundle.main，因为我们现在是独立的 App！
         guard let bundle = Bundle.main.url(forResource: "default", withExtension: "metallib"),
               let library = try? device.makeLibrary(URL: bundle),
               let kernelFunction = library.makeFunction(name: "visual_forge_kernel") else {
@@ -35,16 +34,13 @@ public class VisualForgeEngine {
         }
         
         self.computePipelineState = try? device.makeComputePipelineState(function: kernelFunction)
-        print("[TKMetaStripper] 🟢 视觉锻造炉点火成功！GPU 管线已就绪。")
+        print("[TKMetaStripper] 🟢 GPU 管线已就绪。")
     }
     
     public func processVideo(inputURL: URL, outputURL: URL, completion: @escaping (Bool) -> Void) {
-        print("[TKMetaStripper] 🚀 开始深度洗白全流程: \(inputURL.lastPathComponent)")
-        
         let asset = AVAsset(url: inputURL)
         guard let videoTrack = asset.tracks(withMediaType: .video).first else {
-            print("[TKMetaStripper] 🔴 错误：找不到视频轨道")
-            completion(false)
+            DispatchQueue.main.async { completion(false) }
             return
         }
         let audioTrack = asset.tracks(withMediaType: .audio).first
@@ -61,10 +57,16 @@ public class VisualForgeEngine {
             videoReaderOutput.alwaysCopiesSampleData = false
             reader.add(videoReaderOutput)
             
+            // 🛡️ 核心修复 1：奇数分辨率防爆锁 (强转偶数)
+            let w = Int(videoTrack.naturalSize.width)
+            let h = Int(videoTrack.naturalSize.height)
+            let safeW = w + (w % 2)
+            let safeH = h + (h % 2)
+            
             let writerVideoSettings: [String: Any] = [
                 AVVideoCodecKey: AVVideoCodecType.hevc,
-                AVVideoWidthKey: videoTrack.naturalSize.width,
-                AVVideoHeightKey: videoTrack.naturalSize.height
+                AVVideoWidthKey: safeW,
+                AVVideoHeightKey: safeH
             ]
             let videoWriterInput = AVAssetWriterInput(mediaType: .video, outputSettings: writerVideoSettings)
             videoWriterInput.expectsMediaDataInRealTime = false
@@ -86,24 +88,35 @@ public class VisualForgeEngine {
             writer.startWriting()
             writer.startSession(atSourceTime: .zero)
             
-            let processingQueue = DispatchQueue(label: "com.tkmetasturpper.visualForgeQueue")
+            let processingQueue = DispatchQueue(label: "com.tkmetasturpper.forgeQueue")
             
-            videoWriterInput.requestMediaDataWhenReady(on: processingQueue) {
+            // 🛡️ 核心修复 2：强制在闭包内捕获 reader 和 writer，防止被系统 ARC 内存死刑回收！
+            videoWriterInput.requestMediaDataWhenReady(on: processingQueue) { [reader, writer] in
+                
                 while videoWriterInput.isReadyForMoreMediaData {
                     guard let sampleBuffer = videoReaderOutput.copyNextSampleBuffer() else {
                         videoWriterInput.markAsFinished()
                         
+                        // 安全处理音频通道
                         if let aOutput = audioReaderOutput, let aInput = audioWriterInput {
                             while let audioBuffer = aOutput.copyNextSampleBuffer() {
-                                if aInput.isReadyForMoreMediaData {
-                                    aInput.append(audioBuffer)
+                                // 🛡️ 核心修复 3：防死锁。如果写入器卡住，直接中断跳出，不让手机卡死
+                                while !aInput.isReadyForMoreMediaData {
+                                    if writer.status == .failed || writer.status == .cancelled { break }
+                                    usleep(10000)
                                 }
+                                if writer.status == .failed { break }
+                                aInput.append(audioBuffer)
                             }
                             aInput.markAsFinished()
                         }
                         
                         writer.finishWriting {
-                            print("[TKMetaStripper] 🟢 洗白完成！已生成纯净原生视频。")
+                            if writer.status == .failed {
+                                print("[TKMetaStripper] 🔴 底层压制失败: \(String(describing: writer.error))")
+                                DispatchQueue.main.async { completion(false) }
+                                return
+                            }
                             DispatchQueue.main.async { completion(true) }
                         }
                         break
@@ -118,34 +131,38 @@ public class VisualForgeEngine {
                 }
             }
         } catch {
-            print("[TKMetaStripper] 🔴 管线崩溃: \(error.localizedDescription)")
-            completion(false)
+            DispatchQueue.main.async { completion(false) }
         }
     }
     
     private func renderFrameOnGPU(pixelBuffer: CVPixelBuffer, currentTime: Float) {
-        // 🔧 修复点 2：去掉了未使用的 device 变量，消除了警告
         guard let commandQueue = commandQueue,
               let textureCache = textureCache,
               let pipelineState = computePipelineState else { return }
         
-        let width = CVPixelBufferGetWidth(pixelBuffer)
-        let height = CVPixelBufferGetHeight(pixelBuffer)
+        // 🛡️ 核心修复 4：精准获取色彩平面真实尺寸，防止边距内存溢出
+        let widthY = CVPixelBufferGetWidthOfPlane(pixelBuffer, 0)
+        let heightY = CVPixelBufferGetHeightOfPlane(pixelBuffer, 0)
+        let widthUV = CVPixelBufferGetWidthOfPlane(pixelBuffer, 1)
+        let heightUV = CVPixelBufferGetHeightOfPlane(pixelBuffer, 1)
         
         var yTextureRef: CVMetalTexture?
         var uvTextureRef: CVMetalTexture?
         
-        CVMetalTextureCacheCreateTextureFromImage(kCFAllocatorDefault, textureCache, pixelBuffer, nil, .r8Unorm, width, height, 0, &yTextureRef)
-        CVMetalTextureCacheCreateTextureFromImage(kCFAllocatorDefault, textureCache, pixelBuffer, nil, .rg8Unorm, width / 2, height / 2, 1, &uvTextureRef)
+        CVMetalTextureCacheCreateTextureFromImage(kCFAllocatorDefault, textureCache, pixelBuffer, nil, .r8Unorm, widthY, heightY, 0, &yTextureRef)
+        CVMetalTextureCacheCreateTextureFromImage(kCFAllocatorDefault, textureCache, pixelBuffer, nil, .rg8Unorm, widthUV, heightUV, 1, &uvTextureRef)
         
-        guard let yTexture = CVMetalTextureGetTexture(yTextureRef!),
-              let uvTexture = CVMetalTextureGetTexture(uvTextureRef!) else { return }
+        // 🛡️ 核心修复 5：坚决剔除强制解包 (!)，如果某帧损坏直接跳过，绝不闪退 App
+        guard let yRef = yTextureRef, let uvRef = uvTextureRef,
+              let yTexture = CVMetalTextureGetTexture(yRef),
+              let uvTexture = CVMetalTextureGetTexture(uvRef) else { 
+            return 
+        }
         
         guard let commandBuffer = commandQueue.makeCommandBuffer(),
               let encoder = commandBuffer.makeComputeCommandEncoder() else { return }
         
         encoder.setComputePipelineState(pipelineState)
-        
         encoder.setTexture(yTexture, index: 0)
         encoder.setTexture(uvTexture, index: 1)
         encoder.setTexture(yTexture, index: 2)
@@ -155,8 +172,8 @@ public class VisualForgeEngine {
         encoder.setBytes(&timeValue, length: MemoryLayout<Float>.size, index: 0)
         
         let threadGroupSize = MTLSize(width: 16, height: 16, depth: 1)
-        let threadGroups = MTLSize(width: (width + threadGroupSize.width - 1) / threadGroupSize.width,
-                                   height: (height + threadGroupSize.height - 1) / threadGroupSize.height,
+        let threadGroups = MTLSize(width: (widthY + threadGroupSize.width - 1) / threadGroupSize.width,
+                                   height: (heightY + threadGroupSize.height - 1) / threadGroupSize.height,
                                    depth: 1)
         
         encoder.dispatchThreadgroups(threadGroups, threadsPerThreadgroup: threadGroupSize)
@@ -165,4 +182,4 @@ public class VisualForgeEngine {
         commandBuffer.commit()
         commandBuffer.waitUntilCompleted()
     }
-} // 🔧 修复点 3：补齐了丢失的类结束大括号！
+}
