@@ -15,10 +15,7 @@ public class VisualForgeEngine {
     }
     
     private func setupMetalEnvironment() {
-        guard let device = MTLCreateSystemDefaultDevice() else {
-            print("[TKMetaStripper] 🔴 致命错误：设备不支持 Metal")
-            return
-        }
+        guard let device = MTLCreateSystemDefaultDevice() else { return }
         self.metalDevice = device
         self.commandQueue = device.makeCommandQueue()
         
@@ -28,13 +25,9 @@ public class VisualForgeEngine {
         
         guard let bundle = Bundle.main.url(forResource: "default", withExtension: "metallib"),
               let library = try? device.makeLibrary(URL: bundle),
-              let kernelFunction = library.makeFunction(name: "visual_forge_kernel") else {
-            print("[TKMetaStripper] 🔴 致命错误：找不到 Metal 着色器函数")
-            return
-        }
+              let kernelFunction = library.makeFunction(name: "visual_forge_kernel") else { return }
         
         self.computePipelineState = try? device.makeComputePipelineState(function: kernelFunction)
-        print("[TKMetaStripper] 🟢 GPU 管线已就绪。")
     }
     
     public func processVideo(inputURL: URL, outputURL: URL, completion: @escaping (Bool) -> Void) {
@@ -55,33 +48,50 @@ public class VisualForgeEngine {
             ]
             let videoReaderOutput = AVAssetReaderTrackOutput(track: videoTrack, outputSettings: readerVideoSettings)
             videoReaderOutput.alwaysCopiesSampleData = false
-            reader.add(videoReaderOutput)
+            if reader.canAdd(videoReaderOutput) { reader.add(videoReaderOutput) }
             
-            // 🛡️ 核心修复 1：奇数分辨率防爆锁 (强转偶数)
             let w = Int(videoTrack.naturalSize.width)
             let h = Int(videoTrack.naturalSize.height)
             let safeW = w + (w % 2)
             let safeH = h + (h % 2)
             
+            // 🛡️ 防爆锁 3：强制转为 Int，坚决防止浮点数引发的 NSInvalidArgumentException 闪退
+            let estimatedBitrate = videoTrack.estimatedDataRate > 0 ? videoTrack.estimatedDataRate : 25000000
+            let safeBitrate = Int(estimatedBitrate * 1.2)
+            
             let writerVideoSettings: [String: Any] = [
                 AVVideoCodecKey: AVVideoCodecType.hevc,
                 AVVideoWidthKey: safeW,
-                AVVideoHeightKey: safeH
+                AVVideoHeightKey: safeH,
+                AVVideoCompressionPropertiesKey: [
+                    AVVideoAverageBitRateKey: safeBitrate,
+                    AVVideoProfileLevelKey: kVTProfileLevel_HEVC_Main_AutoLevel
+                ]
             ]
             let videoWriterInput = AVAssetWriterInput(mediaType: .video, outputSettings: writerVideoSettings)
             videoWriterInput.expectsMediaDataInRealTime = false
             videoWriterInput.transform = videoTrack.preferredTransform
-            writer.add(videoWriterInput)
+            if writer.canAdd(videoWriterInput) { writer.add(videoWriterInput) }
             
+            // 🛡️ 防爆锁 4：强行将各种奇葩音频转码为标准 AAC，彻底解决容器冲突闪退
             var audioReaderOutput: AVAssetReaderTrackOutput?
             var audioWriterInput: AVAssetWriterInput?
+            
             if let aTrack = audioTrack {
-                audioReaderOutput = AVAssetReaderTrackOutput(track: aTrack, outputSettings: nil)
-                reader.add(audioReaderOutput!)
+                let aOutput = AVAssetReaderTrackOutput(track: aTrack, outputSettings: nil)
+                if reader.canAdd(aOutput) { reader.add(aOutput) }
+                audioReaderOutput = aOutput
                 
-                audioWriterInput = AVAssetWriterInput(mediaType: .audio, outputSettings: nil)
-                audioWriterInput!.expectsMediaDataInRealTime = false
-                writer.add(audioWriterInput!)
+                let audioSettings: [String: Any] = [
+                    AVFormatIDKey: kAudioFormatMPEG4AAC,
+                    AVNumberOfChannelsKey: 2,
+                    AVSampleRateKey: 44100,
+                    AVEncoderBitRateKey: 128000
+                ]
+                let aInput = AVAssetWriterInput(mediaType: .audio, outputSettings: audioSettings)
+                aInput.expectsMediaDataInRealTime = false
+                if writer.canAdd(aInput) { writer.add(aInput) }
+                audioWriterInput = aInput
             }
             
             reader.startReading()
@@ -90,17 +100,15 @@ public class VisualForgeEngine {
             
             let processingQueue = DispatchQueue(label: "com.tkmetasturpper.forgeQueue")
             
-            // 🛡️ 核心修复 2：强制在闭包内捕获 reader 和 writer，防止被系统 ARC 内存死刑回收！
-            videoWriterInput.requestMediaDataWhenReady(on: processingQueue) { [reader, writer] in
+            videoWriterInput.requestMediaDataWhenReady(on: processingQueue) { [weak self, reader, writer] in
+                guard let self = self else { return }
                 
                 while videoWriterInput.isReadyForMoreMediaData {
                     guard let sampleBuffer = videoReaderOutput.copyNextSampleBuffer() else {
                         videoWriterInput.markAsFinished()
                         
-                        // 安全处理音频通道
                         if let aOutput = audioReaderOutput, let aInput = audioWriterInput {
                             while let audioBuffer = aOutput.copyNextSampleBuffer() {
-                                // 🛡️ 核心修复 3：防死锁。如果写入器卡住，直接中断跳出，不让手机卡死
                                 while !aInput.isReadyForMoreMediaData {
                                     if writer.status == .failed || writer.status == .cancelled { break }
                                     usleep(10000)
@@ -113,7 +121,6 @@ public class VisualForgeEngine {
                         
                         writer.finishWriting {
                             if writer.status == .failed {
-                                print("[TKMetaStripper] 🔴 底层压制失败: \(String(describing: writer.error))")
                                 DispatchQueue.main.async { completion(false) }
                                 return
                             }
@@ -140,7 +147,6 @@ public class VisualForgeEngine {
               let textureCache = textureCache,
               let pipelineState = computePipelineState else { return }
         
-        // 🛡️ 核心修复 4：精准获取色彩平面真实尺寸，防止边距内存溢出
         let widthY = CVPixelBufferGetWidthOfPlane(pixelBuffer, 0)
         let heightY = CVPixelBufferGetHeightOfPlane(pixelBuffer, 0)
         let widthUV = CVPixelBufferGetWidthOfPlane(pixelBuffer, 1)
@@ -152,7 +158,7 @@ public class VisualForgeEngine {
         CVMetalTextureCacheCreateTextureFromImage(kCFAllocatorDefault, textureCache, pixelBuffer, nil, .r8Unorm, widthY, heightY, 0, &yTextureRef)
         CVMetalTextureCacheCreateTextureFromImage(kCFAllocatorDefault, textureCache, pixelBuffer, nil, .rg8Unorm, widthUV, heightUV, 1, &uvTextureRef)
         
-        // 🛡️ 核心修复 5：坚决剔除强制解包 (!)，如果某帧损坏直接跳过，绝不闪退 App
+        // 🛡️ 防爆锁 5：抛弃所有强解包 (!)
         guard let yRef = yTextureRef, let uvRef = uvTextureRef,
               let yTexture = CVMetalTextureGetTexture(yRef),
               let uvTexture = CVMetalTextureGetTexture(uvRef) else { 
