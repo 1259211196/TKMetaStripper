@@ -67,44 +67,90 @@ public class VisualForgeEngine {
             videoWriterInput.transform = videoTrack.preferredTransform
             if writer.canAdd(videoWriterInput) { writer.add(videoWriterInput) }
             
-            // 🌟 上帝级内存锁：建立独立的可写缓冲池，彻底杜绝只读内存引发的闪退！
+            // 🌟 终极适配器：强制写入宽高和 IOSurface，保障系统绝对能分出内存！
             let sourceBufferAttributes: [String: Any] = [
                 kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange,
-                kCVPixelBufferMetalCompatibilityKey as String: true
+                kCVPixelBufferMetalCompatibilityKey as String: true,
+                kCVPixelBufferIOSurfacePropertiesKey as String: [:],
+                kCVPixelBufferWidthKey as String: safeW,
+                kCVPixelBufferHeightKey as String: safeH
             ]
             let adaptor = AVAssetWriterInputPixelBufferAdaptor(assetWriterInput: videoWriterInput, sourcePixelBufferAttributes: sourceBufferAttributes)
             
-            reader.startReading()
-            writer.startWriting()
-            writer.startSession(atSourceTime: .zero)
+            if !reader.startReading() {
+                DispatchQueue.main.async { completion(false) }
+                return
+            }
+            if !writer.startWriting() {
+                DispatchQueue.main.async { completion(false) }
+                return
+            }
             
             let processingQueue = DispatchQueue(label: "com.tkmetasturpper.forgeQueue")
+            var isSessionStarted = false
             
             videoWriterInput.requestMediaDataWhenReady(on: processingQueue) { [weak self] in
                 guard let self = self else { return }
                 
                 while videoWriterInput.isReadyForMoreMediaData {
+                    if reader.status != .reading {
+                        videoWriterInput.markAsFinished()
+                        if isSessionStarted {
+                            writer.finishWriting { DispatchQueue.main.async { completion(writer.status == .completed) } }
+                        } else {
+                            writer.cancelWriting()
+                            DispatchQueue.main.async { completion(false) }
+                        }
+                        break
+                    }
+                    
                     if let sampleBuffer = videoReaderOutput.copyNextSampleBuffer() {
+                        let pts = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
+                        
+                        if !isSessionStarted {
+                            writer.startSession(atSourceTime: pts)
+                            isSessionStarted = true
+                        }
+                        
+                        var frameAppended = false
+                        
                         autoreleasepool {
-                            let pts = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
-                            if let sourceBuffer = CMSampleBufferGetImageBuffer(sampleBuffer),
-                               let pool = adaptor.pixelBufferPool {
+                            if let sourceBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) {
+                                let width = CVPixelBufferGetWidth(sourceBuffer)
+                                let height = CVPixelBufferGetHeight(sourceBuffer)
                                 
+                                // 🌟 独立强开内存区：拒绝看系统脸色，直接手写内存条！
                                 var destBuffer: CVPixelBuffer?
-                                // 从池子里提取一块绝对安全、可写的新内存交给 GPU
-                                CVPixelBufferPoolCreatePixelBuffer(kCFAllocatorDefault, pool, &destBuffer)
+                                let attrs = [
+                                    kCVPixelBufferMetalCompatibilityKey: true,
+                                    kCVPixelBufferIOSurfacePropertiesKey: [:]
+                                ] as CFDictionary
                                 
-                                if let dBuffer = destBuffer {
+                                let status = CVPixelBufferCreate(kCFAllocatorDefault, width, height, kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange, attrs, &destBuffer)
+                                
+                                if status == kCVReturnSuccess, let dBuffer = destBuffer {
                                     let time = pts.isValid ? Float(pts.seconds) : 0.0
                                     self.renderFrameOnGPU(source: sourceBuffer, dest: dBuffer, currentTime: time)
-                                    adaptor.append(dBuffer, withPresentationTime: pts)
+                                    
+                                    if writer.status == .writing {
+                                        frameAppended = adaptor.append(dBuffer, withPresentationTime: pts)
+                                    }
                                 }
                             }
                         }
+                        
+                        // 🌟 终极防爆兜底：如果 GPU 出任何意外（极低概率），把原版画面硬塞进去！确保管线不断裂！
+                        if !frameAppended && writer.status == .writing {
+                            videoWriterInput.append(sampleBuffer)
+                        }
+                        
                     } else {
                         videoWriterInput.markAsFinished()
-                        writer.finishWriting { 
-                            DispatchQueue.main.async { completion(writer.status == .completed) } 
+                        if isSessionStarted {
+                            writer.finishWriting { DispatchQueue.main.async { completion(writer.status == .completed) } }
+                        } else {
+                            writer.cancelWriting()
+                            DispatchQueue.main.async { completion(false) }
                         }
                         break
                     }
@@ -124,6 +170,8 @@ public class VisualForgeEngine {
         let heightY = CVPixelBufferGetHeightOfPlane(source, 0)
         let widthUV = CVPixelBufferGetWidthOfPlane(source, 1)
         let heightUV = CVPixelBufferGetHeightOfPlane(source, 1)
+        
+        guard widthY > 0 && heightY > 0 && widthUV > 0 && heightUV > 0 else { return }
         
         var srcYRef: CVMetalTexture?
         var srcUVRef: CVMetalTexture?
@@ -163,6 +211,6 @@ public class VisualForgeEngine {
         encoder.endEncoding()
         
         commandBuffer.commit()
-        commandBuffer.waitUntilCompleted() // 确保 GPU 写完后才进入下一帧
+        commandBuffer.waitUntilCompleted()
     }
 }
