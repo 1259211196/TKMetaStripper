@@ -32,17 +32,16 @@ public class VisualForgeEngine {
     
     public func processVideo(inputURL: URL, outputURL: URL, completion: @escaping (Bool) -> Void) {
         let asset = AVAsset(url: inputURL)
+        // 🚀 核心大修：彻底抛弃音频提取，只专注于视频画面的 GPU 锻造！
         guard let videoTrack = asset.tracks(withMediaType: .video).first else {
             DispatchQueue.main.async { completion(false) }
             return
         }
-        let audioTrack = asset.tracks(withMediaType: .audio).first
         
         do {
             let reader = try AVAssetReader(asset: asset)
             let writer = try AVAssetWriter(outputURL: outputURL, fileType: .mp4)
             
-            // --- 🎬 视频通道准备 ---
             let readerVideoSettings: [String: Any] = [
                 kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange,
                 kCVPixelBufferMetalCompatibilityKey as String: true
@@ -61,112 +60,51 @@ public class VisualForgeEngine {
                 AVVideoCodecKey: AVVideoCodecType.hevc,
                 AVVideoWidthKey: safeW,
                 AVVideoHeightKey: safeH,
-                AVVideoCompressionPropertiesKey: [
-                    AVVideoAverageBitRateKey: Int(estimatedBitrate)
-                ]
+                AVVideoCompressionPropertiesKey: [ AVVideoAverageBitRateKey: Int(estimatedBitrate) ]
             ]
             let videoWriterInput = AVAssetWriterInput(mediaType: .video, outputSettings: writerVideoSettings)
             videoWriterInput.expectsMediaDataInRealTime = false
             videoWriterInput.transform = videoTrack.preferredTransform
             if writer.canAdd(videoWriterInput) { writer.add(videoWriterInput) }
             
-            // --- 🎵 音频通道准备 ---
-            var audioReaderOutput: AVAssetReaderTrackOutput?
-            var audioWriterInput: AVAssetWriterInput?
-            
-            if let aTrack = audioTrack {
-                let aOutput = AVAssetReaderTrackOutput(track: aTrack, outputSettings: nil)
-                if reader.canAdd(aOutput) { reader.add(aOutput) }
-                audioReaderOutput = aOutput
-                
-                let audioSettings: [String: Any] = [
-                    AVFormatIDKey: kAudioFormatMPEG4AAC,
-                    AVNumberOfChannelsKey: 2,
-                    AVSampleRateKey: 44100,
-                    AVEncoderBitRateKey: 128000
-                ]
-                let aInput = AVAssetWriterInput(mediaType: .audio, outputSettings: audioSettings)
-                aInput.expectsMediaDataInRealTime = false
-                if writer.canAdd(aInput) { writer.add(aInput) }
-                audioWriterInput = aInput
-            }
-            
             reader.startReading()
             writer.startWriting()
             writer.startSession(atSourceTime: .zero)
             
-            // 🚀 核心大修：单线程“拉链式”交织写入，彻底解决闪退与死锁！
             let processingQueue = DispatchQueue(label: "com.tkmetasturpper.forgeQueue")
             
-            processingQueue.async { [weak self] in
+            // 因为只有单轨视频，我们恢复使用苹果官方最稳定的回调机制，绝生死锁！
+            videoWriterInput.requestMediaDataWhenReady(on: processingQueue) { [weak self] in
                 guard let self = self else { return }
                 
-                var videoDone = false
-                var audioDone = (audioTrack == nil)
-                
-                // 只要视频或音频有一个没写完，就继续循环
-                while !videoDone || !audioDone {
-                    
-                    if reader.status == .failed || writer.status == .failed || writer.status == .cancelled {
+                while videoWriterInput.isReadyForMoreMediaData {
+                    if reader.status != .reading {
+                        videoWriterInput.markAsFinished()
+                        writer.finishWriting { DispatchQueue.main.async { completion(writer.status == .completed) } }
                         break
                     }
                     
-                    var wroteDataThisCycle = false
-                    
-                    // 1. 尝试写一帧视频
-                    if !videoDone && videoWriterInput.isReadyForMoreMediaData {
-                        if let sampleBuffer = videoReaderOutput.copyNextSampleBuffer() {
-                            autoreleasepool {
-                                if let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) {
-                                    let time = Float(CMSampleBufferGetPresentationTimeStamp(sampleBuffer).seconds)
-                                    self.renderFrameOnGPU(pixelBuffer: pixelBuffer, currentTime: time)
-                                }
-                                videoWriterInput.append(sampleBuffer)
+                    if let sampleBuffer = videoReaderOutput.copyNextSampleBuffer() {
+                        autoreleasepool {
+                            if let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) {
+                                let time = Float(CMSampleBufferGetPresentationTimeStamp(sampleBuffer).seconds)
+                                self.renderFrameOnGPU(pixelBuffer: pixelBuffer, currentTime: time)
                             }
-                            wroteDataThisCycle = true
-                        } else {
-                            videoWriterInput.markAsFinished()
-                            videoDone = true
+                            videoWriterInput.append(sampleBuffer)
                         }
-                    }
-                    
-                    // 2. 尝试写一帧音频
-                    if !audioDone, let aInput = audioWriterInput, let aOutput = audioReaderOutput {
-                        if aInput.isReadyForMoreMediaData {
-                            if let sampleBuffer = aOutput.copyNextSampleBuffer() {
-                                aInput.append(sampleBuffer)
-                                wroteDataThisCycle = true
-                            } else {
-                                aInput.markAsFinished()
-                                audioDone = true
-                            }
-                        }
-                    }
-                    
-                    // 3. 如果底层缓冲区满了（这轮既没写视频也没写音频），休眠 5 毫秒防 CPU 卡死
-                    if !wroteDataThisCycle && (!videoDone || !audioDone) {
-                        usleep(5000)
-                    }
-                }
-                
-                // 🏁 全部写完，安全收尾
-                if writer.status == .failed {
-                    print("[TKMetaStripper] 底层封装失败: \(String(describing: writer.error))")
-                    DispatchQueue.main.async { completion(false) }
-                } else {
-                    writer.finishWriting {
-                        DispatchQueue.main.async {
-                            completion(writer.status == .completed)
-                        }
+                    } else {
+                        videoWriterInput.markAsFinished()
+                        writer.finishWriting { DispatchQueue.main.async { completion(writer.status == .completed) } }
+                        break
                     }
                 }
             }
-            
         } catch {
             DispatchQueue.main.async { completion(false) }
         }
     }
     
+    // ... 下方的 renderFrameOnGPU 方法保持不变，完美沿用 ...
     private func renderFrameOnGPU(pixelBuffer: CVPixelBuffer, currentTime: Float) {
         guard let commandQueue = commandQueue,
               let textureCache = textureCache,
@@ -185,9 +123,7 @@ public class VisualForgeEngine {
         
         guard let yRef = yTextureRef, let uvRef = uvTextureRef,
               let yTexture = CVMetalTextureGetTexture(yRef),
-              let uvTexture = CVMetalTextureGetTexture(uvRef) else { 
-            return 
-        }
+              let uvTexture = CVMetalTextureGetTexture(uvRef) else { return }
         
         guard let commandBuffer = commandQueue.makeCommandBuffer(),
               let encoder = commandBuffer.makeComputeCommandEncoder() else { return }
