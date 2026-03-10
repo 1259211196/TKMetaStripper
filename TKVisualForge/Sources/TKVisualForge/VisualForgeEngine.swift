@@ -65,7 +65,7 @@ public class VisualForgeEngine {
                 AVVideoHeightKey: safeH,
                 AVVideoCompressionPropertiesKey: [
                     AVVideoAverageBitRateKey: safeBitrate,
-                    AVVideoProfileLevelKey: kVTProfileLevel_HEVC_Main_AutoLevel
+                    AVVideoProfileLevelKey: AVVideoProfileLevelHEVCMainAutoLevel // 🌟 换成这个 AVFoundation 自带的常量
                 ]
             ]
             let videoWriterInput = AVAssetWriterInput(mediaType: .video, outputSettings: writerVideoSettings)
