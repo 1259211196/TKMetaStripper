@@ -4,7 +4,6 @@
 #import <PhotosUI/PhotosUI.h>
 #import <sys/utsname.h>
 
-// 🌟 引入 Theos 自动生成的 Swift 桥接文件，连接我们的 GPU 引擎
 #import "TKMetaStripper-Swift.h"
 
 @interface TKAppViewController : UIViewController <PHPickerViewControllerDelegate>
@@ -13,15 +12,11 @@
 @property (nonatomic, strong) UIButton *countryButton;
 @property (nonatomic, strong) UIActivityIndicatorView *spinner;
 @property (nonatomic, strong) UILabel *statusLabel;
-
-// 🎯 V12 终极升级：自带时区特征的多国物理坐标库
 @property (nonatomic, strong) NSArray *countryData;
-
 @property (nonatomic, strong) NSArray<PHPickerResult *> *pendingResults;
 @property (nonatomic, assign) NSInteger currentIndex;
 @property (nonatomic, strong) NSMutableArray<NSURL *> *successfullyCleanedURLs;
 @property (nonatomic, strong) NSMutableArray<PHAsset *> *assetsToDelete;
-
 @property (nonatomic, assign) NSInteger failedCount;
 
 @end
@@ -32,10 +27,8 @@
     [super viewDidLoad];
     self.view.backgroundColor = [UIColor systemBackgroundColor];
     
-    // 启动级底层垃圾回收，防止磁盘爆满
     [self performGarbageCollection];
     
-    // 🔥 终极数据结构：绑定国家的物理坐标与标准时区，彻底消除零时区破绽
     self.countryData = @[
         @{@"name": @"🇩🇪 德国 (法兰克福)", @"gps": @"+50.1109+008.6821/", @"tz": @"Europe/Berlin"},
         @{@"name": @"🇫🇷 法国 (巴黎)",     @"gps": @"+48.8566+002.3522/", @"tz": @"Europe/Paris"},
@@ -51,7 +44,7 @@
     self.statusLabel = [[UILabel alloc] initWithFrame:CGRectMake(20, 80, self.view.bounds.size.width - 40, 120)];
     self.statusLabel.numberOfLines = 0;
     self.statusLabel.textAlignment = NSTextAlignmentCenter;
-    self.statusLabel.text = @"V12 上帝级完备版就绪\n(GPU锻造 + 真实主板探针 + 时光倒流)\n已适配最新 iOS 底层架构";
+    self.statusLabel.text = @"V12 防爆重构版就绪\n(已修复底层内存闪退漏洞)\n等待下发指令...";
     [self.view addSubview:self.statusLabel];
     
     self.countryButton = [UIButton buttonWithType:UIButtonTypeSystem];
@@ -92,15 +85,11 @@
                 [fm removeItemAtPath:[tempDir stringByAppendingPathComponent:file] error:nil];
             }
         }
-        NSLog(@"[TKMetaStripper] 启动级磁盘清道夫已完毕。");
     });
 }
 
 - (void)showCountryPicker {
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"🌍 切换矩阵目标国家"
-                                                                   message:@"新生成的视频将烙印该国家的绝对物理GPS坐标与时区"
-                                                            preferredStyle:UIAlertControllerStyleActionSheet];
-    
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"🌍 切换矩阵目标国家" message:nil preferredStyle:UIAlertControllerStyleActionSheet];
     for (int i = 0; i < self.countryData.count; i++) {
         UIAlertAction *action = [UIAlertAction actionWithTitle:self.countryData[i][@"name"] style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
             [[NSUserDefaults standardUserDefaults] setInteger:i forKey:@"TKTargetCountryIndex"];
@@ -109,19 +98,14 @@
         }];
         [alert addAction:action];
     }
-    
-    UIAlertAction *cancel = [UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil];
-    [alert addAction:cancel];
-    
+    [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
     if ([[UIDevice currentDevice] userInterfaceIdiom] == UIUserInterfaceIdiomPad) {
         alert.popoverPresentationController.sourceView = self.countryButton;
         alert.popoverPresentationController.sourceRect = self.countryButton.bounds;
     }
-    
     [self presentViewController:alert animated:YES completion:nil];
 }
 
-// 🛡️ 极客校验：精准探针，直接读取当前运行手机的主板真实型号，绝不随机瞎编
 - (NSString *)getRealHardwareModel {
     struct utsname systemInfo;
     uname(&systemInfo);
@@ -162,16 +146,27 @@
     
     PHPickerResult *result = self.pendingResults[self.currentIndex];
     NSString *assetIdentifier = result.assetIdentifier;
-    PHFetchResult<PHAsset *> *fetchResult = [PHAsset fetchAssetsWithLocalIdentifiers:@[assetIdentifier] options:nil];
-    PHAsset *originalAsset = fetchResult.firstObject;
     
-    __weak typeof(self) weakSelf = self; // 内存泄漏防爆锁
-    [result.itemProvider loadFileRepresentationForTypeIdentifier:@"public.movie" completionHandler:^(NSURL * _Nullable url, NSError * _Nullable error) {
+    // 🛡️ 防爆锁 1：彻底解决相册部分权限导致的 nil 数组闪退
+    PHAsset *originalAsset = nil;
+    if (assetIdentifier != nil) {
+        PHFetchResult<PHAsset *> *fetchResult = [PHAsset fetchAssetsWithLocalIdentifiers:@[assetIdentifier] options:nil];
+        originalAsset = fetchResult.firstObject;
+    }
+    
+    // 🛡️ 防爆锁 2：动态嗅探真实视频文件类型，防止获取失败
+    NSString *typeIdentifier = @"public.movie";
+    if (![result.itemProvider hasItemConformingToTypeIdentifier:typeIdentifier]) {
+        typeIdentifier = result.itemProvider.registeredTypeIdentifiers.firstObject;
+    }
+    
+    __weak typeof(self) weakSelf = self;
+    [result.itemProvider loadFileRepresentationForTypeIdentifier:typeIdentifier completionHandler:^(NSURL * _Nullable url, NSError * _Nullable error) {
         __strong typeof(weakSelf) strongSelf = weakSelf;
         if (!strongSelf) return;
         
         if (!url || error) {
-            NSLog(@"[TKMetaStripper] 视频源流提取失败: %@", error);
+            NSLog(@"[TKMetaStripper] 视频提取失败: %@", error);
             strongSelf.failedCount++;
             [strongSelf nextTick];
             return;
@@ -184,24 +179,19 @@
         }
         
         NSError *copyError = nil;
-        BOOL copySuccess = [[NSFileManager defaultManager] copyItemAtURL:url toURL:safeURL error:&copyError];
-        if (!copySuccess) {
+        if (![[NSFileManager defaultManager] copyItemAtURL:url toURL:safeURL error:&copyError]) {
             strongSelf.failedCount++;
             [strongSelf nextTick];
             return;
         }
         
-        // 🚀 第一级火箭：先交由 GPU 进行视觉锻造！
         [strongSelf executeGPUForgeOnSafeURL:safeURL originalAsset:originalAsset];
     }];
 }
 
-// ==========================================
-// 🚀 核心级联系统：第一级 GPU 视觉重构
-// ==========================================
 - (void)executeGPUForgeOnSafeURL:(NSURL *)safeURL originalAsset:(PHAsset *)originalAsset {
     dispatch_async(dispatch_get_main_queue(), ^{
-        self.statusLabel.text = [NSString stringWithFormat:@"正在进行 GPU 视觉重构 %ld / %ld ...\n(打碎特征矩阵，请耐心等待)", (long)(self.currentIndex + 1), (long)self.pendingResults.count];
+        self.statusLabel.text = [NSString stringWithFormat:@"正在进行 GPU 视觉重构 %ld / %ld ...", (long)(self.currentIndex + 1), (long)self.pendingResults.count];
     });
 
     NSString *tempDir = NSTemporaryDirectory();
@@ -209,16 +199,14 @@
     
     TKMetaStripperManager *manager = [[TKMetaStripperManager alloc] init];
     
-    __weak typeof(self) weakSelf = self; // 内存泄漏防爆锁
+    __weak typeof(self) weakSelf = self;
     [manager forgeVideoWithInputPath:safeURL.path outputPath:forgedPath completion:^(BOOL success) {
         __strong typeof(weakSelf) strongSelf = weakSelf;
         if (!strongSelf) return;
         
-        // 清除原始拷贝流
         [[NSFileManager defaultManager] removeItemAtURL:safeURL error:nil];
         
         if (!success) {
-            NSLog(@"[TKMetaStripper] GPU 锻造失败！");
             strongSelf.failedCount++;
             [strongSelf nextTick];
             return;
@@ -229,33 +217,24 @@
     }];
 }
 
-// ==========================================
-// 🚀 核心级联系统：第二级 CPU 元数据注入
-// ==========================================
 - (void)executeCleanOnForgedURL:(NSURL *)forgedURL originalAsset:(PHAsset *)originalAsset {
     dispatch_async(dispatch_get_main_queue(), ^{
-        self.statusLabel.text = [NSString stringWithFormat:@"正在注入底层物理特征 %ld / %ld ...\n(伪造坐标与时光倒流)", (long)(self.currentIndex + 1), (long)self.pendingResults.count];
+        self.statusLabel.text = [NSString stringWithFormat:@"正在注入底层物理特征 %ld / %ld ...", (long)(self.currentIndex + 1), (long)self.pendingResults.count];
     });
 
-    __weak typeof(self) weakSelf = self; // 内存泄漏防爆锁
+    __weak typeof(self) weakSelf = self;
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_HIGH, 0), ^{
         __strong typeof(weakSelf) strongSelf = weakSelf;
         if (!strongSelf) return;
         
         AVURLAsset *asset = [[AVURLAsset alloc] initWithURL:forgedURL options:nil];
-        NSString *tempDir = NSTemporaryDirectory();
-        NSString *outputPath = [tempDir stringByAppendingPathComponent:[NSString stringWithFormat:@"TKCleaned_%@.mp4", [[NSUUID UUID] UUIDString]]];
+        NSString *outputPath = [NSTemporaryDirectory() stringByAppendingPathComponent:[NSString stringWithFormat:@"TKCleaned_%@.mp4", [[NSUUID UUID] UUIDString]]];
         NSURL *outputURL = [NSURL fileURLWithPath:outputPath];
-        
-        if ([[NSFileManager defaultManager] fileExistsAtPath:outputPath]) {
-            [[NSFileManager defaultManager] removeItemAtPath:outputPath error:nil];
-        }
         
         AVAssetExportSession *exportSession = [[AVAssetExportSession alloc] initWithAsset:asset presetName:AVAssetExportPresetHighestQuality];
         exportSession.outputURL = outputURL;
         exportSession.outputFileType = AVFileTypeMPEG4;
         
-        // 色彩防灰映射
         AVAssetTrack *videoTrack = [[asset tracksWithMediaType:AVMediaTypeVideo] firstObject];
         if (@available(iOS 14.0, *)) {
             if ([videoTrack hasMediaCharacteristic:AVMediaCharacteristicContainsHDRVideo]) {
@@ -277,7 +256,6 @@
         makeItem.value = @"Apple";
         [clonedMetadata addObject:makeItem];
         
-        // 🌟 核心注入 1：调用我们在上面写好的探针，精准注入本台测试机的物理特征
         AVMutableMetadataItem *modelItem = [[AVMutableMetadataItem alloc] init];
         modelItem.keySpace = AVMetadataKeySpaceCommon;
         modelItem.key = AVMetadataCommonKeyModel;
@@ -290,16 +268,13 @@
         softwareItem.value = [[UIDevice currentDevice] systemVersion];
         [clonedMetadata addObject:softwareItem];
         
-        // 提取国家地理信息
         NSInteger savedIndex = [[NSUserDefaults standardUserDefaults] integerForKey:@"TKTargetCountryIndex"];
         if (savedIndex >= strongSelf.countryData.count) savedIndex = 0;
         NSString *targetGPS = strongSelf.countryData[savedIndex][@"gps"];
         NSString *targetTZ = strongSelf.countryData[savedIndex][@"tz"];
         
-        // 🌟 核心注入 2：防风控时光倒流机制（随机推迟 10 分钟 到 3 小时前拍摄）
-        int randomSecondsDelay = (10 + arc4random_uniform(170)) * 60; // 600秒 ~ 10800秒
+        int randomSecondsDelay = (10 + arc4random_uniform(170)) * 60;
         NSDate *randomizedPastDate = [[NSDate date] dateByAddingTimeInterval:-randomSecondsDelay];
-        
         NSDateFormatter *formatter = [[NSDateFormatter alloc] init];
         [formatter setDateFormat:@"yyyy-MM-dd'T'HH:mm:ssZ"];
         [formatter setTimeZone:[NSTimeZone timeZoneWithName:targetTZ]];
@@ -311,7 +286,6 @@
         dateItem.value = localTimeString;
         [clonedMetadata addObject:dateItem];
         
-        // GPS基站注入
         AVMutableMetadataItem *locationItem = [[AVMutableMetadataItem alloc] init];
         locationItem.keySpace = AVMetadataKeySpaceCommon;
         locationItem.key = AVMetadataCommonKeyLocation;
@@ -321,8 +295,7 @@
         AVMutableMetadataItem *accuracyItem = [[AVMutableMetadataItem alloc] init];
         accuracyItem.keySpace = AVMetadataKeySpaceQuickTimeMetadata;
         accuracyItem.key = @"com.apple.quicktime.location.accuracy.horizontal"; 
-        int randomAccuracy = 15 + arc4random_uniform(51); 
-        accuracyItem.value = @(randomAccuracy);
+        accuracyItem.value = @(15 + arc4random_uniform(51));
         [clonedMetadata addObject:accuracyItem];
         
         exportSession.metadata = clonedMetadata;
@@ -330,15 +303,12 @@
         [exportSession exportAsynchronouslyWithCompletionHandler:^{
             __strong typeof(weakSelf) innerStrongSelf = weakSelf;
             if (!innerStrongSelf) return;
-            
-            // 清理 GPU 锻造完的中间过渡文件
             [[NSFileManager defaultManager] removeItemAtURL:forgedURL error:nil];
             
             if (exportSession.status == AVAssetExportSessionStatusCompleted) {
                 [innerStrongSelf.successfullyCleanedURLs addObject:outputURL];
                 if (originalAsset) [innerStrongSelf.assetsToDelete addObject:originalAsset];
             } else {
-                NSLog(@"[TKMetaStripper] 底层重编码失败: %@", exportSession.error.localizedDescription);
                 innerStrongSelf.failedCount++; 
             }
             [innerStrongSelf nextTick];
@@ -355,11 +325,11 @@
 
 - (void)commitBatchChanges {
     dispatch_async(dispatch_get_main_queue(), ^{
-        self.statusLabel.text = @"全部底层重写完毕！正在安全入库...";
+        self.statusLabel.text = @"处理完毕！正在入库...";
     });
     
     if (self.successfullyCleanedURLs.count == 0) {
-        [self finalizeUIAndCleanupWithStatus:[NSString stringWithFormat:@"❌ 批处理全军覆没。\n%ld 个视频全部洗白失败。", (long)self.failedCount]];
+        [self finalizeUIAndCleanupWithStatus:[NSString stringWithFormat:@"❌ 失败: %ld 个视频。", (long)self.failedCount]];
         return;
     }
     
@@ -372,14 +342,12 @@
             [[PHPhotoLibrary sharedPhotoLibrary] performChanges:^{
                 [PHAssetChangeRequest deleteAssets:self.assetsToDelete];
             } completionHandler:^(BOOL deleteSuccess, NSError * _Nullable deleteError) {
-                NSString *finalStatus = [NSString stringWithFormat:@"%@\n成功: %ld 个 | 失败: %ld 个", 
-                                         deleteSuccess ? @"✅ 矩阵入库完美收工！旧片已销毁。" : @"⚠️ 新片已保存！但您拒绝了自动销毁旧片。",
-                                         (long)self.successfullyCleanedURLs.count,
-                                         (long)self.failedCount];
-                [self finalizeUIAndCleanupWithStatus:finalStatus];
+                [self finalizeUIAndCleanupWithStatus:[NSString stringWithFormat:@"%@\n成功: %ld | 失败: %ld", 
+                                         deleteSuccess ? @"✅ 成功入库并销毁旧片！" : @"⚠️ 新片已保存！",
+                                         (long)self.successfullyCleanedURLs.count, (long)self.failedCount]];
             }];
         } else {
-            [self finalizeUIAndCleanupWithStatus:@"❌ 写入相册被系统拦截，请检查权限设置。"];
+            [self finalizeUIAndCleanupWithStatus:@"❌ 相册写入被拒绝。"];
         }
     }];
 }
@@ -390,7 +358,6 @@
         self.selectButton.enabled = YES;
         self.countryButton.enabled = YES; 
         self.statusLabel.text = statusText;
-        
         for (NSURL *url in self.successfullyCleanedURLs) {
             [[NSFileManager defaultManager] removeItemAtURL:url error:nil];
         }
