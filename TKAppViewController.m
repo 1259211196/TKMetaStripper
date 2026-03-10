@@ -43,7 +43,7 @@
     self.statusLabel = [[UILabel alloc] initWithFrame:CGRectMake(20, 80, self.view.bounds.size.width - 40, 120)];
     self.statusLabel.numberOfLines = 0;
     self.statusLabel.textAlignment = NSTextAlignmentCenter;
-    self.statusLabel.text = @"V15 终极微创侠客版\n(0画质损伤/居中微漂移/声纹重组/FastStart)\n等待指令...";
+    self.statusLabel.text = @"V16 终极微创侠客版 (零警告/完美编译)\n(0画质损伤/居中微漂移/声纹重组/FastStart)\n等待指令...";
     [self.view addSubview:self.statusLabel];
     
     self.countryButton = [UIButton buttonWithType:UIButtonTypeSystem];
@@ -105,7 +105,6 @@
     [self presentViewController:alert animated:YES completion:nil];
 }
 
-// 获取底层真实的硬件代号 (如 iPhone14,2)
 - (NSString *)getRealHardwareModel {
     struct utsname systemInfo;
     uname(&systemInfo);
@@ -265,10 +264,12 @@
         if (audioTrack) {
             audioMix = [AVMutableAudioMix audioMix];
             AVMutableCompositionTrack *targetAudioTrack = [mixComposition tracksWithMediaType:AVMediaTypeAudio].firstObject;
-            AVMutableAudioMixInputParameters *mixParam = [AVMutableAudioMixInputParameters audioMixInputParametersWithTrack:targetAudioTrack];
-            // 全局音量下调 2% (0.98)，人耳完全无感，但底层的音频 MD5 和频谱彻底断裂
-            [mixParam setVolume:0.98 atTime:kCMTimeZero];
-            audioMix.inputParameters = @[mixParam];
+            if (targetAudioTrack) {
+                AVMutableAudioMixInputParameters *mixParam = [AVMutableAudioMixInputParameters audioMixInputParametersWithTrack:targetAudioTrack];
+                // 全局音量下调 2% (0.98)，人耳完全无感，但底层的音频 MD5 和频谱彻底断裂
+                [mixParam setVolume:0.98 atTime:kCMTimeZero];
+                audioMix.inputParameters = @[mixParam];
+            }
         }
         
         NSString *outputPath = [NSTemporaryDirectory() stringByAppendingPathComponent:[NSString stringWithFormat:@"TKCleaned_%@.mp4", [[NSUUID UUID] UUIDString]]];
@@ -359,10 +360,10 @@
         swQT.value = [NSString stringWithFormat:@"%@", systemVer];
         [clonedMetadata addObject:swQT];
         
-        // 6. 终极伪装：补齐 iPhone 镜头与光圈的物理 Exif 参数
-        [clonedMetadata addObject:[strongSelf createExifItemWithKey:(id)kCGImagePropertyExifFNumber value:@(1.8)]];
-        [clonedMetadata addObject:[strongSelf createExifItemWithKey:(id)kCGImagePropertyExifFocalLength value:@(4.2)]];
-        [clonedMetadata addObject:[strongSelf createExifItemWithKey:(id)kCGImagePropertyExifLensModel value:[NSString stringWithFormat:@"%@ back main camera 24mm f/1.78", realModel]]];
+        // 6. 🌟 核心修复：完美兼容 QuickTime 空间的镜头物理指纹
+        [clonedMetadata addObject:[strongSelf createQuickTimeMetadataItemWithKey:@"com.apple.quicktime.f-number" value:@(1.8)]];
+        [clonedMetadata addObject:[strongSelf createQuickTimeMetadataItemWithKey:@"com.apple.quicktime.focallength" value:@(4.2)]];
+        [clonedMetadata addObject:[strongSelf createQuickTimeMetadataItemWithKey:@"com.apple.quicktime.lensmodel" value:[NSString stringWithFormat:@"%@ back main camera 24mm f/1.78", realModel]]];
 
         exportSession.metadata = clonedMetadata;
         
@@ -384,10 +385,10 @@
     });
 }
 
-// 辅助方法：快速生成底层 Exif 标签
-- (AVMutableMetadataItem *)createExifItemWithKey:(NSString *)key value:(id)value {
+// 🌟 核心修复：专供视频文件的 QuickTime 元数据生成器
+- (AVMutableMetadataItem *)createQuickTimeMetadataItemWithKey:(NSString *)key value:(id)value {
     AVMutableMetadataItem *item = [[AVMutableMetadataItem alloc] init];
-    item.keySpace = AVMetadataKeySpaceExif;
+    item.keySpace = AVMetadataKeySpaceQuickTimeMetadata;
     item.key = key;
     item.value = value;
     return item;
