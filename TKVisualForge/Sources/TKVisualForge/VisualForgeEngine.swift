@@ -42,6 +42,7 @@ public class VisualForgeEngine {
             let reader = try AVAssetReader(asset: asset)
             let writer = try AVAssetWriter(outputURL: outputURL, fileType: .mp4)
             
+            // --- 🎬 视频通道初始化 ---
             let readerVideoSettings: [String: Any] = [
                 kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange,
                 kCVPixelBufferMetalCompatibilityKey as String: true
@@ -54,18 +55,14 @@ public class VisualForgeEngine {
             let h = Int(videoTrack.naturalSize.height)
             let safeW = w + (w % 2)
             let safeH = h + (h % 2)
-            
-            // 🛡️ 防爆锁 3：强制转为 Int，坚决防止浮点数引发的 NSInvalidArgumentException 闪退
             let estimatedBitrate = videoTrack.estimatedDataRate > 0 ? videoTrack.estimatedDataRate : 25000000
-            let safeBitrate = Int(estimatedBitrate * 1.2)
             
             let writerVideoSettings: [String: Any] = [
                 AVVideoCodecKey: AVVideoCodecType.hevc,
                 AVVideoWidthKey: safeW,
                 AVVideoHeightKey: safeH,
                 AVVideoCompressionPropertiesKey: [
-                    // 🌟 终极防爆：只给超高码率，放权让苹果底层硬件自动选择最完美的 Profile Level！
-                    AVVideoAverageBitRateKey: safeBitrate
+                    AVVideoAverageBitRateKey: Int(estimatedBitrate)
                 ]
             ]
             let videoWriterInput = AVAssetWriterInput(mediaType: .video, outputSettings: writerVideoSettings)
@@ -73,7 +70,7 @@ public class VisualForgeEngine {
             videoWriterInput.transform = videoTrack.preferredTransform
             if writer.canAdd(videoWriterInput) { writer.add(videoWriterInput) }
             
-            // 🛡️ 防爆锁 4：强行将各种奇葩音频转码为标准 AAC，彻底解决容器冲突闪退
+            // --- 🎵 音频通道初始化 ---
             var audioReaderOutput: AVAssetReaderTrackOutput?
             var audioWriterInput: AVAssetWriterInput?
             
@@ -98,45 +95,69 @@ public class VisualForgeEngine {
             writer.startWriting()
             writer.startSession(atSourceTime: .zero)
             
-            let processingQueue = DispatchQueue(label: "com.tkmetasturpper.forgeQueue")
+            // 🛡️ 核心大修：创建两条完全独立的并发线程，防死锁！
+            let videoQueue = DispatchQueue(label: "com.tkmetasturpper.videoQueue")
+            let audioQueue = DispatchQueue(label: "com.tkmetasturpper.audioQueue")
+            let group = DispatchGroup()
             
-            videoWriterInput.requestMediaDataWhenReady(on: processingQueue) { [weak self, reader, writer] in
+            // 🚀 启动视频处理专线
+            group.enter()
+            videoWriterInput.requestMediaDataWhenReady(on: videoQueue) { [weak self] in
                 guard let self = self else { return }
-                
                 while videoWriterInput.isReadyForMoreMediaData {
-                    guard let sampleBuffer = videoReaderOutput.copyNextSampleBuffer() else {
+                    if reader.status == .failed || writer.status == .failed {
                         videoWriterInput.markAsFinished()
-                        
-                        if let aOutput = audioReaderOutput, let aInput = audioWriterInput {
-                            while let audioBuffer = aOutput.copyNextSampleBuffer() {
-                                while !aInput.isReadyForMoreMediaData {
-                                    if writer.status == .failed || writer.status == .cancelled { break }
-                                    usleep(10000)
-                                }
-                                if writer.status == .failed { break }
-                                aInput.append(audioBuffer)
-                            }
-                            aInput.markAsFinished()
-                        }
-                        
-                        writer.finishWriting {
-                            if writer.status == .failed {
-                                DispatchQueue.main.async { completion(false) }
-                                return
-                            }
-                            DispatchQueue.main.async { completion(true) }
-                        }
+                        group.leave()
                         break
                     }
-                    
+                    guard let sampleBuffer = videoReaderOutput.copyNextSampleBuffer() else {
+                        videoWriterInput.markAsFinished()
+                        group.leave()
+                        break
+                    }
                     autoreleasepool {
-                        guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
-                        let time = Float(CMSampleBufferGetPresentationTimeStamp(sampleBuffer).seconds)
-                        self.renderFrameOnGPU(pixelBuffer: pixelBuffer, currentTime: time)
+                        if let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) {
+                            let time = Float(CMSampleBufferGetPresentationTimeStamp(sampleBuffer).seconds)
+                            self.renderFrameOnGPU(pixelBuffer: pixelBuffer, currentTime: time)
+                        }
                         videoWriterInput.append(sampleBuffer)
                     }
                 }
             }
+            
+            // 🚀 启动音频处理专线
+            if let aInput = audioWriterInput, let aOutput = audioReaderOutput {
+                group.enter()
+                aInput.requestMediaDataWhenReady(on: audioQueue) {
+                    while aInput.isReadyForMoreMediaData {
+                        if reader.status == .failed || writer.status == .failed {
+                            aInput.markAsFinished()
+                            group.leave()
+                            break
+                        }
+                        guard let sampleBuffer = aOutput.copyNextSampleBuffer() else {
+                            aInput.markAsFinished()
+                            group.leave()
+                            break
+                        }
+                        aInput.append(sampleBuffer)
+                    }
+                }
+            }
+            
+            // 🏁 裁判哨：等待两边都完美交织完毕，才封装输出！
+            group.notify(queue: .main) {
+                if writer.status == .failed || writer.status == .cancelled {
+                    completion(false)
+                } else {
+                    writer.finishWriting {
+                        DispatchQueue.main.async {
+                            completion(writer.status == .completed)
+                        }
+                    }
+                }
+            }
+            
         } catch {
             DispatchQueue.main.async { completion(false) }
         }
@@ -158,7 +179,6 @@ public class VisualForgeEngine {
         CVMetalTextureCacheCreateTextureFromImage(kCFAllocatorDefault, textureCache, pixelBuffer, nil, .r8Unorm, widthY, heightY, 0, &yTextureRef)
         CVMetalTextureCacheCreateTextureFromImage(kCFAllocatorDefault, textureCache, pixelBuffer, nil, .rg8Unorm, widthUV, heightUV, 1, &uvTextureRef)
         
-        // 🛡️ 防爆锁 5：抛弃所有强解包 (!)
         guard let yRef = yTextureRef, let uvRef = uvTextureRef,
               let yTexture = CVMetalTextureGetTexture(yRef),
               let uvTexture = CVMetalTextureGetTexture(uvRef) else { 
