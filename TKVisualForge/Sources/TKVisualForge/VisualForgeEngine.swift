@@ -42,7 +42,7 @@ public class VisualForgeEngine {
             let reader = try AVAssetReader(asset: asset)
             let writer = try AVAssetWriter(outputURL: outputURL, fileType: .mp4)
             
-            // --- 🎬 视频通道初始化 ---
+            // --- 🎬 视频通道准备 ---
             let readerVideoSettings: [String: Any] = [
                 kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange,
                 kCVPixelBufferMetalCompatibilityKey as String: true
@@ -70,7 +70,7 @@ public class VisualForgeEngine {
             videoWriterInput.transform = videoTrack.preferredTransform
             if writer.canAdd(videoWriterInput) { writer.add(videoWriterInput) }
             
-            // --- 🎵 音频通道初始化 ---
+            // --- 🎵 音频通道准备 ---
             var audioReaderOutput: AVAssetReaderTrackOutput?
             var audioWriterInput: AVAssetWriterInput?
             
@@ -95,60 +95,64 @@ public class VisualForgeEngine {
             writer.startWriting()
             writer.startSession(atSourceTime: .zero)
             
-            // 🛡️ 核心大修：创建两条完全独立的并发线程，防死锁！
-            let videoQueue = DispatchQueue(label: "com.tkmetasturpper.videoQueue")
-            let audioQueue = DispatchQueue(label: "com.tkmetasturpper.audioQueue")
-            let group = DispatchGroup()
+            // 🚀 核心大修：单线程“拉链式”交织写入，彻底解决闪退与死锁！
+            let processingQueue = DispatchQueue(label: "com.tkmetasturpper.forgeQueue")
             
-            // 🚀 启动视频处理专线
-            group.enter()
-            videoWriterInput.requestMediaDataWhenReady(on: videoQueue) { [weak self] in
+            processingQueue.async { [weak self] in
                 guard let self = self else { return }
-                while videoWriterInput.isReadyForMoreMediaData {
-                    if reader.status == .failed || writer.status == .failed {
-                        videoWriterInput.markAsFinished()
-                        group.leave()
+                
+                var videoDone = false
+                var audioDone = (audioTrack == nil)
+                
+                // 只要视频或音频有一个没写完，就继续循环
+                while !videoDone || !audioDone {
+                    
+                    if reader.status == .failed || writer.status == .failed || writer.status == .cancelled {
                         break
                     }
-                    guard let sampleBuffer = videoReaderOutput.copyNextSampleBuffer() else {
-                        videoWriterInput.markAsFinished()
-                        group.leave()
-                        break
-                    }
-                    autoreleasepool {
-                        if let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) {
-                            let time = Float(CMSampleBufferGetPresentationTimeStamp(sampleBuffer).seconds)
-                            self.renderFrameOnGPU(pixelBuffer: pixelBuffer, currentTime: time)
+                    
+                    var wroteDataThisCycle = false
+                    
+                    // 1. 尝试写一帧视频
+                    if !videoDone && videoWriterInput.isReadyForMoreMediaData {
+                        if let sampleBuffer = videoReaderOutput.copyNextSampleBuffer() {
+                            autoreleasepool {
+                                if let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) {
+                                    let time = Float(CMSampleBufferGetPresentationTimeStamp(sampleBuffer).seconds)
+                                    self.renderFrameOnGPU(pixelBuffer: pixelBuffer, currentTime: time)
+                                }
+                                videoWriterInput.append(sampleBuffer)
+                            }
+                            wroteDataThisCycle = true
+                        } else {
+                            videoWriterInput.markAsFinished()
+                            videoDone = true
                         }
-                        videoWriterInput.append(sampleBuffer)
+                    }
+                    
+                    // 2. 尝试写一帧音频
+                    if !audioDone, let aInput = audioWriterInput, let aOutput = audioReaderOutput {
+                        if aInput.isReadyForMoreMediaData {
+                            if let sampleBuffer = aOutput.copyNextSampleBuffer() {
+                                aInput.append(sampleBuffer)
+                                wroteDataThisCycle = true
+                            } else {
+                                aInput.markAsFinished()
+                                audioDone = true
+                            }
+                        }
+                    }
+                    
+                    // 3. 如果底层缓冲区满了（这轮既没写视频也没写音频），休眠 5 毫秒防 CPU 卡死
+                    if !wroteDataThisCycle && (!videoDone || !audioDone) {
+                        usleep(5000)
                     }
                 }
-            }
-            
-            // 🚀 启动音频处理专线
-            if let aInput = audioWriterInput, let aOutput = audioReaderOutput {
-                group.enter()
-                aInput.requestMediaDataWhenReady(on: audioQueue) {
-                    while aInput.isReadyForMoreMediaData {
-                        if reader.status == .failed || writer.status == .failed {
-                            aInput.markAsFinished()
-                            group.leave()
-                            break
-                        }
-                        guard let sampleBuffer = aOutput.copyNextSampleBuffer() else {
-                            aInput.markAsFinished()
-                            group.leave()
-                            break
-                        }
-                        aInput.append(sampleBuffer)
-                    }
-                }
-            }
-            
-            // 🏁 裁判哨：等待两边都完美交织完毕，才封装输出！
-            group.notify(queue: .main) {
-                if writer.status == .failed || writer.status == .cancelled {
-                    completion(false)
+                
+                // 🏁 全部写完，安全收尾
+                if writer.status == .failed {
+                    print("[TKMetaStripper] 底层封装失败: \(String(describing: writer.error))")
+                    DispatchQueue.main.async { completion(false) }
                 } else {
                     writer.finishWriting {
                         DispatchQueue.main.async {
